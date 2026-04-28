@@ -1,0 +1,377 @@
+// ─────────────────────────────────────────────────────────
+// EndGit — Database Schema
+// CI/CD + Plugin Marketplace for Endstone
+// ─────────────────────────────────────────────────────────
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ── Auth ──────────────────────────────────────────────────
+
+model User {
+  id          String     @id @default(cuid())
+  githubId    String     @unique
+  username    String     @unique
+  displayName String?
+  email       String?
+  avatarUrl   String?
+  bio         String?
+  trustLevel  TrustLevel @default(NEW)
+  trustScore  Int        @default(0)
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+
+  plugins  Plugin[]
+  reviews  Review[]
+  reports  Report[]
+  ratings  Rating[]
+  sessions Session[]
+  accounts Account[]
+
+  @@map("users")
+}
+
+enum TrustLevel {
+  NEW
+  TRUSTED
+  FLAGGED
+  ADMIN
+}
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.Text
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+  @@map("accounts")
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("sessions")
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+  @@map("verification_tokens")
+}
+
+// ── Plugin ────────────────────────────────────────────────
+
+model Plugin {
+  id              String       @id @default(cuid())
+  name            String       @unique
+  slug            String       @unique
+  displayName     String
+  description     String
+  longDescription String?      @db.Text
+  iconUrl         String?
+  repoUrl         String?
+  license         String?
+  tags            String[]     @default([])
+  pluginType      PluginType   @default(PYTHON)
+  downloads       Int          @default(0)
+  stars           Int          @default(0)
+  status          PluginStatus @default(DRAFT)
+  // Scoring
+  stabilityScore  Float        @default(0)
+  trustScore      Float        @default(0)
+  qualityBadge    QualityBadge @default(NONE)
+  isVerified      Boolean      @default(false)
+  reviewBuildId   String?      // Build ID currently submitted for review
+  webhookId       String?      // GitHub webhook ID
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+
+  authorId String
+  author   User   @relation(fields: [authorId], references: [id])
+
+  versions   Version[]
+  builds     Build[]
+  autoChecks AutoCheck[]
+  reviews    Review[]
+  reports    Report[]
+  ratings    Rating[]
+  analytics  PluginAnalytics[]
+
+  @@index([authorId])
+  @@index([status])
+  @@index([downloads])
+  @@index([slug])
+  @@index([status, downloads])  // Marketplace listing: WHERE status='APPROVED' ORDER BY downloads
+  @@index([status, createdAt])  // Latest plugins: WHERE status='APPROVED' ORDER BY createdAt
+  @@map("plugins")
+}
+
+model PluginAnalytics {
+  id        String   @id @default(cuid())
+  pluginId  String
+  plugin    Plugin   @relation(fields: [pluginId], references: [id], onDelete: Cascade)
+  date      DateTime @db.Date // Store just the date part for daily aggregation
+  downloads Int      @default(0)
+  views     Int      @default(0)
+
+  @@unique([pluginId, date])
+  @@map("plugin_analytics")
+}
+
+enum PluginType {
+  PYTHON
+  CPP
+  BOTH
+}
+
+enum PluginStatus {
+  DRAFT
+  BUILDING
+  BUILD_FAILED
+  PENDING_REVIEW
+  APPROVED
+  REJECTED
+  FLAGGED
+  SUSPENDED
+}
+
+enum QualityBadge {
+  NONE
+  EXPERIMENTAL
+  STABLE
+  VERIFIED
+}
+
+// ── Version ───────────────────────────────────────────────
+
+model Version {
+  id            String        @id @default(cuid())
+  version       String
+  changelog     String?       @db.Text
+  fileUrl       String
+  fileName      String
+  fileSize      Int
+  fileHash      String
+  minApiVersion String?
+  supportedApis String[]
+  downloads     Int           @default(0)
+  isLatest      Boolean       @default(false)
+  status        VersionStatus @default(PENDING)
+  createdAt     DateTime      @default(now())
+
+  pluginId     String
+  plugin       Plugin       @relation(fields: [pluginId], references: [id], onDelete: Cascade)
+  dependencies Dependency[]
+  producers    Producer[]
+
+  @@unique([pluginId, version])
+  @@index([pluginId])
+  @@map("versions")
+}
+
+enum VersionStatus {
+  PENDING
+  AUTO_PASSED
+  SANDBOX_PASSED
+  APPROVED
+  REJECTED
+}
+
+// ── Build (CI/CD Live Builds) ─────────────────────────────
+
+model Build {
+  id           String      @id @default(cuid())
+  buildNumber  Int         // Auto-increment per plugin
+  commitHash   String?     // Git commit SHA
+  branch       String      @default("main")
+  status       BuildStatus @default(QUEUED)
+  isRelease    Boolean     @default(false)
+  triggerType  String      @default("MANUAL") // WEBHOOK, MANUAL
+  commitMessage String?    @db.Text
+  logs         String?     @db.Text
+  artifactUrl  String?     // Download URL for built artifact
+  artifactSize Int?        // File size in bytes
+  duration     Int?        // Build time in seconds
+  safeScore    Int?        // 0-100 security score from static analysis
+  scanResults  String?     @db.Text // JSON string of scan findings
+  createdAt    DateTime    @default(now())
+  finishedAt   DateTime?
+
+  pluginId String
+  plugin   Plugin @relation(fields: [pluginId], references: [id], onDelete: Cascade)
+
+  @@index([pluginId])
+  @@index([createdAt])
+  @@index([status])
+  @@index([pluginId, createdAt])   // Build history: WHERE pluginId=X ORDER BY createdAt
+  @@index([pluginId, buildNumber]) // Build lookup: finding specific build for submit logic
+  @@map("builds")
+}
+
+enum BuildStatus {
+  QUEUED
+  RUNNING
+  SUCCESS
+  FAILED
+  CANCELLED
+}
+
+model Dependency {
+  id        String @id @default(cuid())
+  name      String
+  version   String
+  versionId String
+
+  parentVersion Version @relation(fields: [versionId], references: [id], onDelete: Cascade)
+
+  @@map("dependencies")
+}
+
+model Producer {
+  id         String       @id @default(cuid())
+  githubUser String
+  role       ProducerRole
+  versionId  String
+
+  version    Version      @relation(fields: [versionId], references: [id], onDelete: Cascade)
+
+  @@index([versionId])
+  @@map("producers")
+}
+
+enum ProducerRole {
+  COLLABORATOR
+  CONTRIBUTOR
+  TRANSLATOR
+  REQUESTER
+}
+
+// ── Review Pipeline ───────────────────────────────────────
+
+model AutoCheck {
+  id             String      @id @default(cuid())
+  tier           CheckTier
+  status         CheckStatus @default(RUNNING)
+  structureOk    Boolean?
+  depsOk         Boolean?
+  semverOk       Boolean?
+  fileSizeOk     Boolean?
+  securityScanOk Boolean?
+  sandboxLoadOk  Boolean?
+  sandboxCrashFree Boolean?
+  logs           String?     @db.Text
+  score          Float?
+  createdAt      DateTime    @default(now())
+  finishedAt     DateTime?
+
+  pluginId String
+  plugin   Plugin @relation(fields: [pluginId], references: [id], onDelete: Cascade)
+
+  @@index([pluginId])
+  @@map("auto_checks")
+}
+
+enum CheckTier {
+  TIER_1_AUTO
+  TIER_2_SANDBOX
+}
+
+enum CheckStatus {
+  RUNNING
+  PASSED
+  FAILED
+  SKIPPED
+}
+
+model Review {
+  id         String         @id @default(cuid())
+  decision   ReviewDecision
+  comment    String?        @db.Text
+  codeClean  Boolean?
+  noBackdoor Boolean?
+  rulesOk    Boolean?
+  createdAt  DateTime       @default(now())
+
+  reviewerId String
+  reviewer   User   @relation(fields: [reviewerId], references: [id])
+  pluginId   String
+  plugin     Plugin @relation(fields: [pluginId], references: [id], onDelete: Cascade)
+
+  @@index([pluginId])
+  @@index([reviewerId]) // Admin queries filtering reviews by reviewer
+  @@map("reviews")
+}
+
+enum ReviewDecision {
+  APPROVED
+  REJECTED
+  REQUEST_CHANGES
+}
+
+// ── Community Moderation ──────────────────────────────────
+
+model Report {
+  id        String       @id @default(cuid())
+  reason    ReportReason
+  details   String?      @db.Text
+  resolved  Boolean      @default(false)
+  createdAt DateTime     @default(now())
+
+  reporterId String
+  reporter   User   @relation(fields: [reporterId], references: [id])
+  pluginId   String
+  plugin     Plugin @relation(fields: [pluginId], references: [id], onDelete: Cascade)
+
+  @@index([pluginId])
+  @@map("reports")
+}
+
+enum ReportReason {
+  MALWARE
+  SPAM
+  COPIED
+  BROKEN
+  INAPPROPRIATE
+  OTHER
+}
+
+model Rating {
+  id        String   @id @default(cuid())
+  score     Int
+  comment   String?  @db.Text
+  createdAt DateTime @default(now())
+
+  userId   String
+  user     User   @relation(fields: [userId], references: [id])
+  pluginId String
+  plugin   Plugin @relation(fields: [pluginId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, pluginId])
+  @@index([pluginId])
+  @@map("ratings")
+}
