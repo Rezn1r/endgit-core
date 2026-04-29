@@ -214,8 +214,17 @@ model Build {
   triggerType  String      @default("MANUAL") // WEBHOOK, MANUAL
   commitMessage String?    @db.Text
   logs         String?     @db.Text
-  artifactUrl  String?     // Download URL for built artifact
+  artifactUrl  String?     // Download URL for built artifact (Python .whl)
   artifactSize Int?        // File size in bytes
+  // ── Multi-platform C++ artifacts ────────────
+  artifactUrlLinux  String?  // Linux .so artifact URL
+  artifactSizeLinux Int?     // Linux .so file size
+  artifactUrlWin    String?  // Windows .dll artifact URL
+  artifactSizeWin   Int?     // Windows .dll file size
+  // ── GitHub Actions tracking ─────────────────
+  winBuildStatus String?     // PENDING | RUNNING | SUCCESS | FAILED
+  linuxBuildStatus String?   // PENDING | RUNNING | SUCCESS | FAILED
+  ghActionsRunId String?     // GitHub Actions workflow run ID
   duration     Int?        // Build time in seconds
   safeScore    Int?        // 0-100 security score from static analysis
   scanResults  String?     @db.Text // JSON string of scan findings

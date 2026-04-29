@@ -21,6 +21,7 @@ import { adminRouter } from "./routes/admin";
 import { ratingRouter } from "./routes/ratings";
 import { submitRouter } from "./routes/submit";
 import { webhookRouter } from "./routes/webhooks";
+import { callbackRouter } from "./routes/callback";
 
 const app: express.Express = express();
 const PORT = process.env.API_PORT || 4000;
@@ -71,6 +72,7 @@ app.use("/api/v1/admin", adminRouter);
 app.use("/api/v1/ratings", ratingRouter);
 app.use("/api/v1/submit", submitRouter);
 app.use("/api/v1/webhooks", webhookRouter);
+app.use("/api/v1/builds", callbackRouter); // GitHub Actions artifact callbacks
 
 // ── Error Handler ────────────────────────────────────────
 
