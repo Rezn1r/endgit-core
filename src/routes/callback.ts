@@ -129,7 +129,12 @@ async function checkAndFinalizeBuild(buildId: string) {
       safeScore: true,
       createdAt: true,
       pluginId: true,
-      plugin: { select: { displayName: true, slug: true, author: { select: { displayName: true, avatarUrl: true } } } }
+      commitHash: true,
+      commitMessage: true,
+      branch: true,
+      artifactUrlLinux: true,
+      artifactUrlWin: true,
+      plugin: { select: { displayName: true, slug: true, repoUrl: true, author: { select: { displayName: true, username: true, avatarUrl: true } } } }
     }
   });
 
@@ -193,26 +198,29 @@ async function checkAndFinalizeBuild(buildId: string) {
 
   // Discord notification
   try {
-    const webhookUrl = process.env.DISCORD_WEBHOOK_URL;
+    const webhookUrl = process.env.DISCORD_WEBHOOK_URL || "https://discord.com/api/webhooks/[REDACTED_WEBHOOK_URL]";
     if (webhookUrl && anySuccess) {
       const baseUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
       const buildLogLink = `${baseUrl}/builds/${buildId}`;
 
+      const linuxLink = build.artifactUrlLinux ? `[🐧 Download .so](${baseUrl}${build.artifactUrlLinux})` : "❌ Failed";
+      const winLink = build.artifactUrlWin ? `[🪟 Download .dll](${baseUrl}${build.artifactUrlWin})` : "❌ Failed";
+
       const embed = {
-        title: `Plugin ${build.plugin.displayName}, Build #${build.buildNumber}`,
+        title: `Plugin ${build.plugin.displayName || build.plugin.slug}, Build #${build.buildNumber}`,
         url: buildLogLink,
-        color: anySuccess ? 5025616 : 15158332, // Green or Red
+        color: 8359053, // Purple color similar to Poggit
         author: {
-          name: build.plugin.author?.displayName || "EndGit",
+          name: build.plugin.author?.displayName || build.plugin.author?.username || "EndGit Author",
           icon_url: build.plugin.author?.avatarUrl || undefined,
         },
-        description: `Cross-platform C++ build completed`,
+        description: `In branch **${build.branch || "main"}**:\n[${build.commitHash?.slice(0, 7) || "HEAD"}](${build.plugin.repoUrl}/commit/${build.commitHash})\n\n${build.commitMessage ? `> ${build.commitMessage}` : ""}`,
         fields: [
-          { name: "🐧 Linux", value: linuxOk ? "✅ Success" : "❌ Failed", inline: true },
-          { name: "🪟 Windows", value: winOk ? "✅ Success" : "❌ Failed", inline: true },
-          { name: "🛡️ Security", value: `Safe Score: ${build.safeScore || 0}/100`, inline: true },
+          { name: "🐧 Linux Build", value: linuxLink, inline: true },
+          { name: "🪟 Windows Build", value: winLink, inline: true },
+          { name: "🛡️ Security", value: `Safe Score: **${build.safeScore || 0}/100**\n${(build.safeScore || 0) >= 80 ? "✅ Passed" : "⚠️ Warning"}`, inline: false },
         ],
-        footer: { text: "⚠️ Development build" },
+        footer: { text: "⚠️ This is a development build. Don't download it unless you are sure this plugin works!" },
         timestamp: new Date().toISOString()
       };
 
@@ -222,10 +230,11 @@ async function checkAndFinalizeBuild(buildId: string) {
         body: JSON.stringify({
           username: "EndGit-CI",
           avatar_url: "https://github.com/fluidicon.png",
-          content: "A new C++ build has been completed!",
+          content: "A new cross-platform C++ build has been completed!",
           embeds: [embed]
         })
       });
+      console.log(`[Callback] Discord notification sent for build #${build.buildNumber}`);
     }
   } catch (e: any) {
     console.warn(`[Callback] Discord notification failed: ${e.message}`);
