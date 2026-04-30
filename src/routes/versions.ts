@@ -63,13 +63,20 @@ versionsRouter.post("/:slug", requireAuth, async (req: AuthRequest, res: Respons
       if (!build || build.pluginId !== plugin.id || build.status !== "SUCCESS") {
         return res.status(400).json({ success: false, error: "Invalid or unsuccessful build ID" });
       }
-      actualFileUrl = build.artifactUrl;
-      actualFileName = `plugin-${version}.zip`; // Placeholder name from build
-      actualFileSize = build.artifactSize || 0;
+
+      if (plugin.pluginType === "CPP") {
+        actualFileUrl = JSON.stringify({ linux: build.artifactUrlLinux, win: build.artifactUrlWin });
+        actualFileName = `plugin-${version}-cpp`;
+        actualFileSize = (build.artifactSizeLinux || 0) + (build.artifactSizeWin || 0);
+      } else {
+        actualFileUrl = build.artifactUrl;
+        actualFileName = `plugin-${version}.zip`; // Placeholder name from build
+        actualFileSize = build.artifactSize || 0;
+      }
       actualFileHash = "sha256-from-build"; // In a real system, calculate or store this in build
     }
 
-    if (!actualFileUrl || !actualFileName) {
+    if (!actualFileUrl || (!actualFileName && plugin.pluginType !== "CPP")) {
       return res.status(400).json({ success: false, error: "File URL and Name are required" });
     }
 

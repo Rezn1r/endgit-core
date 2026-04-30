@@ -121,7 +121,11 @@ adminRouter.get("/plugins", requireAuth, requireAdmin, async (req: AuthRequest, 
         take: limit,
         orderBy: { createdAt: "desc" },
         include: {
-          author: { select: { username: true, displayName: true } }
+          author: { select: { username: true, displayName: true } },
+          versions: {
+            orderBy: { createdAt: "desc" },
+            select: { id: true, version: true, status: true, createdAt: true }
+          }
         }
       }),
       prisma.plugin.count({ where })
@@ -152,5 +156,27 @@ adminRouter.patch("/plugins/:id/status", requireAuth, requireAdmin, async (req: 
     res.json({ success: true, data: plugin });
   } catch (error: any) {
     res.status(500).json({ success: false, error: "Failed to update plugin status" });
+  }
+});
+
+/**
+ * PATCH /api/v1/admin/versions/:id/status — Change version status
+ */
+adminRouter.patch("/versions/:id/status", requireAuth, requireAdmin, async (req: AuthRequest, res: Response) => {
+  try {
+    const { status } = req.body;
+    if (!["PENDING", "APPROVED", "REJECTED"].includes(status)) {
+      return res.status(400).json({ success: false, error: "Invalid version status" });
+    }
+
+    const version = await prisma.version.update({
+      where: { id: String(req.params.id) },
+      data: { status },
+      select: { id: true, version: true, status: true }
+    });
+
+    res.json({ success: true, data: version });
+  } catch (error: any) {
+    res.status(500).json({ success: false, error: "Failed to update version status" });
   }
 });

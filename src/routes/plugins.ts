@@ -87,7 +87,7 @@ pluginRouter.get("/", optionalAuth, async (req: AuthRequest, res: Response) => {
             },
           },
           versions: {
-            where: { isLatest: true },
+            orderBy: { createdAt: "desc" },
             select: { version: true },
             take: 1,
           },
@@ -196,7 +196,7 @@ pluginRouter.get("/trending", async (_req: Request, res: Response) => {
           select: { username: true, displayName: true, avatarUrl: true },
         },
         versions: {
-          where: { isLatest: true },
+          orderBy: { createdAt: "desc" },
           select: { version: true },
           take: 1,
         },
@@ -231,7 +231,7 @@ pluginRouter.get("/latest", async (_req: Request, res: Response) => {
           select: { username: true, displayName: true, avatarUrl: true },
         },
         versions: {
-          where: { isLatest: true },
+          orderBy: { createdAt: "desc" },
           select: { version: true },
           take: 1,
         },
@@ -274,6 +274,7 @@ pluginRouter.get("/:slug", optionalAuth, async (req: Request, res: Response) => 
             id: true,
             version: true,
             changelog: true,
+            longDescription: true,
             fileName: true,
             fileSize: true,
             downloads: true,

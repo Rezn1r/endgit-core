@@ -101,11 +101,14 @@ submitRouter.post("/:buildId", requireAuth, async (req: AuthRequest, res: Respon
 
     // Transaction to update Plugin and Create Version with Producers
     await prisma.$transaction(async (tx) => {
+      const existingPlugin = await tx.plugin.findUnique({ where: { id: build.plugin.id } });
+      const newStatus = existingPlugin?.status === "APPROVED" ? "APPROVED" : "PENDING_REVIEW";
+
       // Update plugin metadata and status
       await tx.plugin.update({
         where: { id: build.plugin.id },
         data: {
-          status: "PENDING_REVIEW",
+          status: newStatus,
           reviewBuildId: build.id,
           displayName,
           description: description || build.plugin.name,
@@ -116,17 +119,31 @@ submitRouter.post("/:buildId", requireAuth, async (req: AuthRequest, res: Respon
         }
       });
 
+      // Determine file URL based on plugin type
+      let versionFileUrl = build.artifactUrl || "";
+      let versionFileName = build.artifactUrl ? build.artifactUrl.split('/').pop()! : `build-${build.buildNumber}.zip`;
+      let versionFileSize = build.artifactSize || 0;
+
+      // For CPP plugins, serialize both platform artifacts
+      const pluginFull = await tx.plugin.findUnique({ where: { id: build.plugin.id }, select: { pluginType: true } });
+      if (pluginFull?.pluginType === "CPP") {
+        versionFileUrl = JSON.stringify({ linux: build.artifactUrlLinux, win: build.artifactUrlWin });
+        versionFileName = `plugin-${version}-cpp`;
+        versionFileSize = (build.artifactSizeLinux || 0) + (build.artifactSizeWin || 0);
+      }
+
       // Create Version with Producers
       await tx.version.create({
         data: {
           pluginId: build.plugin.id,
           version,
-          fileUrl: build.artifactUrl || "",
-          fileName: build.artifactUrl ? build.artifactUrl.split('/').pop()! : `build-${build.buildNumber}.zip`,
-          fileSize: build.artifactSize || 0,
+          fileUrl: versionFileUrl,
+          fileName: versionFileName,
+          fileSize: versionFileSize,
           fileHash: build.commitHash || "",
           status: "PENDING",
           changelog: changelog || req.body.notes || "",
+          longDescription: longDescription || "",
           supportedApis: Array.isArray(supportedApis) ? supportedApis : [],
           isLatest: true,
           producers: {

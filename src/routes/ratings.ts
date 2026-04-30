@@ -26,7 +26,7 @@ ratingRouter.get("/:slug", async (req: Request, res: Response) => {
         skip,
         take: limit,
         orderBy: { createdAt: "desc" },
-        include: { user: { select: { username: true, displayName: true, avatarUrl: true } } }
+        include: { user: { select: { username: true, displayName: true, avatarUrl: true, trustLevel: true } } }
       }),
       prisma.rating.count({ where: { pluginId: plugin.id } })
     ]);
@@ -72,10 +72,6 @@ ratingRouter.post("/:slug", requireAuth, async (req: AuthRequest, res: Response)
     const plugin = await prisma.plugin.findUnique({ where: { slug: String(req.params.slug) } });
     if (!plugin) return res.status(404).json({ success: false, error: "Plugin not found" });
 
-    // Can't rate your own plugin
-    if (plugin.authorId === req.user!.id) {
-      return res.status(403).json({ success: false, error: "Cannot rate your own plugin" });
-    }
 
     const { score, comment } = req.body;
     if (!score || score < 1 || score > 5) {
@@ -94,7 +90,7 @@ ratingRouter.post("/:slug", requireAuth, async (req: AuthRequest, res: Response)
         score,
         comment: comment || null,
       },
-      include: { user: { select: { username: true, displayName: true, avatarUrl: true } } }
+      include: { user: { select: { username: true, displayName: true, avatarUrl: true, trustLevel: true } } }
     });
 
     // Update plugin's star count

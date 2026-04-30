@@ -47,11 +47,32 @@ downloadRouter.get("/:slug/:version", async (req: Request, res: Response) => {
     if (!version) return res.status(404).json({ success: false, error: "Version not found" });
 
     // Extract the actual storage key from fileUrl
-    // fileUrl may be stored as "/api/v1/download/file/encodedKey" or as the raw key
+    // fileUrl may be stored as "/api/v1/download/file/encodedKey", a raw key, or a JSON string for CPP plugins
     let storageKey = version.fileUrl;
+    
+    try {
+      if (storageKey.startsWith("{")) {
+        const parsed = JSON.parse(storageKey);
+        const platform = req.query.platform as string;
+        if (platform === "windows") {
+          storageKey = parsed.win;
+        } else if (platform === "linux") {
+          storageKey = parsed.linux;
+        } else {
+          return res.status(400).json({ success: false, error: "Platform ?platform=linux or ?platform=windows is required for C++ plugins" });
+        }
+      }
+    } catch(e) {
+      // Ignore JSON parse errors, treat as regular string
+    }
+
     const downloadPrefix = "/api/v1/download/file/";
-    if (storageKey.startsWith(downloadPrefix)) {
+    if (storageKey && storageKey.startsWith(downloadPrefix)) {
       storageKey = decodeURIComponent(storageKey.slice(downloadPrefix.length));
+    }
+
+    if (!storageKey) {
+      return res.status(404).json({ success: false, error: "Artifact not found for this platform" });
     }
 
     const file = await storage.download(storageKey);

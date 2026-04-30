@@ -173,6 +173,7 @@ model Version {
   id            String        @id @default(cuid())
   version       String
   changelog     String?       @db.Text
+  longDescription String?     @db.Text
   fileUrl       String
   fileName      String
   fileSize      Int
