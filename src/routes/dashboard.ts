@@ -24,7 +24,7 @@ dashboardRouter.get("/status", requireAuth, async (req: AuthRequest, res: Respon
       });
       
       if (ghRes.ok) {
-        const ghData = await ghRes.json();
+        const ghData = await ghRes.json() as any;
         const appIdStr = process.env.GITHUB_APP_ID || "3517676";
         const appId = parseInt(appIdStr);
         const appSlug = process.env.GITHUB_APP_SLUG || "endgit-local-dev";
