@@ -8,7 +8,7 @@
         "build": "tsc",
         "start": "node dist/index.js",
         "heroku-postbuild": "pnpm run db:generate && pnpm --filter @endgit/types build && pnpm --filter @endgit/storage build && pnpm --filter @endgit/database build && pnpm run build",
-        "db:generate": "pnpm --filter @endgit/database generate",
+        "db:generate": "prisma generate --schema=packages/database/prisma/schema.prisma",
         "db:push": "pnpm --filter @endgit/database push",
         "db:migrate": "pnpm --filter @endgit/database migrate",
         "db:seed": "pnpm --filter @endgit/database seed",
