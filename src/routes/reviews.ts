@@ -87,7 +87,7 @@ reviewRouter.post("/:slug", requireAuth, requireReviewer, async (req: AuthReques
       } else {
         newPluginStatus = "PENDING_REVIEW";
       }
-      await prisma.plugin.update({ where: { id: plugin.id }, data: { status: newPluginStatus } });
+      await prisma.plugin.update({ where: { id: plugin.id }, data: { status: newPluginStatus as any } });
       
       // Also approve/reject the latest version if we are approving the plugin
       const latestVersion = await prisma.version.findFirst({

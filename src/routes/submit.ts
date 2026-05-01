@@ -15,7 +15,7 @@ submitRouter.post("/:buildId", requireAuth, async (req: AuthRequest, res: Respon
   try {
     const build = await prisma.build.findUnique({
       where: { id: String(req.params.buildId) },
-      include: { plugin: { select: { id: true, authorId: true, status: true, name: true } } }
+      include: { plugin: { select: { id: true, authorId: true, status: true, name: true, iconUrl: true, repoUrl: true } } }
     });
 
     if (!build) {
