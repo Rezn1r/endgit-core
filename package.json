@@ -6,8 +6,8 @@
   "scripts": {
     "dev": "tsx watch src/index.ts",
     "build": "tsc",
-    "start": "npx prisma@5 generate --schema=packages/database/prisma/schema.prisma && tsx src/index.ts",
-    "heroku-postbuild": "echo 'Skipping prisma generate in build step to avoid Heroku pruning issues'",
+    "start": "node dist/index.js",
+    "heroku-postbuild": "pnpm run db:generate && pnpm run build",
     "db:generate": "pnpm --filter @endgit/database generate",
     "db:push": "pnpm --filter @endgit/database push",
     "db:migrate": "pnpm --filter @endgit/database migrate",
