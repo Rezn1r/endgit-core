@@ -118,7 +118,12 @@ buildRouter.get("/plugin/:slug", async (req: Request, res: Response) => {
     const [plugin, builds, total] = await Promise.all([
       prisma.plugin.findUnique({
         where: { slug },
-        select: { id: true, name: true, displayName: true }
+        select: { 
+          id: true, name: true, displayName: true, status: true, reviewBuildId: true, pluginType: true,
+          versions: {
+            select: { status: true, fileHash: true, version: true, fileUrl: true }
+          }
+        }
       }),
       prisma.build.findMany({
         where: buildWhere,
@@ -134,6 +139,8 @@ buildRouter.get("/plugin/:slug", async (req: Request, res: Response) => {
           status: true,
           isRelease: true,
           artifactUrl: true,
+          artifactUrlLinux: true,
+          artifactUrlWin: true,
           duration: true,
           createdAt: true,
           finishedAt: true
@@ -146,9 +153,31 @@ buildRouter.get("/plugin/:slug", async (req: Request, res: Response) => {
       return res.status(404).json({ success: false, error: "Plugin not found" });
     }
 
+    // Attach version status to builds using fileUrl or commitHash
+    const buildsWithVersion = builds.map((build: any) => {
+      // Reconstruct the expected fileUrl for this build
+      let expectedFileUrl = build.artifactUrl || "";
+      if (plugin.pluginType === "CPP") {
+        expectedFileUrl = JSON.stringify({ linux: build.artifactUrlLinux, win: build.artifactUrlWin });
+      }
+
+      // Find the version that was created from this build
+      const version = plugin.versions.find((v: any) => {
+        if (expectedFileUrl && v.fileUrl === expectedFileUrl) return true;
+        if (build.commitHash && v.fileHash === build.commitHash) return true;
+        return false;
+      });
+      
+      return {
+        ...build,
+        versionStatus: version ? version.status : (build.isRelease ? "REJECTED" : null),
+        versionString: version ? version.version : null
+      };
+    });
+
     res.json({
       success: true,
-      data: { plugin, builds },
+      data: { plugin, builds: buildsWithVersion },
       pagination: { page, limit, total, totalPages: Math.ceil(total / limit) }
     });
   } catch (error: any) {
@@ -176,6 +205,7 @@ buildRouter.get("/:id", async (req: Request, res: Response) => {
             description: true,
             longDescription: true,
             tags: true,
+            keywords: true,
             license: true,
             repoUrl: true,
             author: {
@@ -184,7 +214,7 @@ buildRouter.get("/:id", async (req: Request, res: Response) => {
             versions: {
               orderBy: { createdAt: "desc" as const },
               take: 1,
-              select: { version: true }
+              select: { version: true, supportedApis: true }
             }
           }
         }

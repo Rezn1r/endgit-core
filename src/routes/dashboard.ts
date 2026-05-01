@@ -5,6 +5,67 @@ import { requireAuth, AuthRequest } from "../middleware/auth";
 
 export const dashboardRouter: Router = Router();
 
+// GET /api/v1/dashboard/status — Check if user has installed the GitHub App
+dashboardRouter.get("/status", requireAuth, async (req: AuthRequest, res: Response) => {
+  try {
+    const account = await prisma.account.findFirst({
+      where: { userId: req.user!.id, provider: "github" },
+      select: { access_token: true }
+    });
+    
+    let hasAppInstalled = false;
+    
+    if (account?.access_token) {
+      const ghRes = await fetch("https://api.github.com/user/installations", {
+        headers: {
+          Authorization: `Bearer ${account.access_token}`,
+          Accept: "application/vnd.github.v3+json"
+        }
+      });
+      
+      if (ghRes.ok) {
+        const ghData = await ghRes.json();
+        const appIdStr = process.env.GITHUB_APP_ID || "3517676";
+        const appId = parseInt(appIdStr);
+        const appSlug = process.env.GITHUB_APP_SLUG || "endgit-local-dev";
+        
+        hasAppInstalled = ghData.installations?.some((inst: any) => 
+          inst.app_id === appId || 
+          inst.app_slug === appSlug || 
+          (inst.app_slug && inst.app_slug.includes("endgit"))
+        ) || false;
+      } else {
+        console.error("Failed to fetch GitHub installations:", ghRes.status, await ghRes.text());
+      }
+    }
+    // Fetch user quota info
+    const user = await prisma.user.findUnique({
+      where: { id: req.user!.id },
+      select: { weeklyBuildQuota: true, weeklyBuildCount: true, quotaResetAt: true }
+    });
+
+    let quota = { used: 0, limit: 50, resetsAt: new Date().toISOString() };
+    if (user) {
+      const now = new Date();
+      let used = user.weeklyBuildCount;
+      let resetsAt = user.quotaResetAt;
+
+      // If reset time has passed, show as 0 used
+      if (now >= user.quotaResetAt) {
+        used = 0;
+        resetsAt = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
+      }
+
+      quota = { used, limit: user.weeklyBuildQuota, resetsAt: resetsAt.toISOString() };
+    }
+    
+    res.json({ success: true, data: { hasAppInstalled, quota } });
+  } catch (error: any) {
+    console.error("Status check error:", error);
+    res.status(500).json({ success: false, error: "Failed to check status" });
+  }
+});
+
 // GET /api/v1/dashboard/plugins — My plugins
 dashboardRouter.get("/plugins", requireAuth, async (req: AuthRequest, res: Response) => {
   try {

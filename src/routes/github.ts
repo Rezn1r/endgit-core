@@ -104,7 +104,10 @@ githubRouter.get("/repos", requireAuth, async (req: AuthRequest, res: Response) 
       return res.status(401).json({ success: false, error: "GitHub account not linked" });
     }
 
-    const ghRes = await fetch("https://api.github.com/user/repos?sort=updated&per_page=100&affiliation=owner,collaborator,organization_member", {
+    const page = parseInt(req.query.page as string) || 1;
+    const perPage = parseInt(req.query.per_page as string) || 30;
+
+    const ghRes = await fetch(`https://api.github.com/user/repos?sort=updated&per_page=${perPage}&page=${page}&affiliation=owner,collaborator,organization_member`, {
       headers: {
         Authorization: `Bearer ${accessToken}`,
         Accept: "application/vnd.github.v3+json",
@@ -114,6 +117,12 @@ githubRouter.get("/repos", requireAuth, async (req: AuthRequest, res: Response) 
 
     if (!ghRes.ok) {
       return res.status(502).json({ success: false, error: "Failed to fetch from GitHub" });
+    }
+
+    let hasMore = false;
+    const linkHeader = ghRes.headers.get("link");
+    if (linkHeader && linkHeader.includes('rel="next"')) {
+      hasMore = true;
     }
 
     const ghRepos = await ghRes.json() as any[];
@@ -145,7 +154,7 @@ githubRouter.get("/repos", requireAuth, async (req: AuthRequest, res: Response) 
       };
     });
 
-    res.json({ success: true, data: repos });
+    res.json({ success: true, data: repos, pagination: { hasMore, page, perPage } });
   } catch (error: any) {
     console.error("GitHub repos error:", error);
     res.status(500).json({ success: false, error: "Failed to fetch repositories" });

@@ -1,7 +1,9 @@
 // Review Routes
 import { Router, Response } from "express";
 import { prisma } from "@endgit/database";
-import { requireAuth, requireAdmin, AuthRequest } from "../middleware/auth";
+import { requireAuth, requireAdmin, requireReviewer, AuthRequest } from "../middleware/auth";
+import { sendPluginApprovedWebhook } from "../utils/discord";
+import { sendRejectionEmail, sendApprovalEmail } from "../utils/mailer";
 
 export const reviewRouter: Router = Router();
 
@@ -40,9 +42,12 @@ reviewRouter.get("/:slug", async (req, res: Response) => {
 
 // POST /api/v1/reviews/:slug — Submit human review (admin)
 // Accepts optional versionId to approve/reject a specific version
-reviewRouter.post("/:slug", requireAuth, requireAdmin, async (req: AuthRequest, res: Response) => {
+reviewRouter.post("/:slug", requireAuth, requireReviewer, async (req: AuthRequest, res: Response) => {
   try {
-    const plugin = await prisma.plugin.findUnique({ where: { slug: String(req.params.slug) } });
+    const plugin = await prisma.plugin.findUnique({
+      where: { slug: String(req.params.slug) },
+      include: { author: { select: { id: true, username: true, email: true } } }
+    });
     if (!plugin) return res.status(404).json({ success: false, error: "Plugin not found" });
 
     const { decision, comment, codeClean, noBackdoor, rulesOk, versionId } = req.body;
@@ -69,9 +74,20 @@ reviewRouter.post("/:slug", requireAuth, requireAdmin, async (req: AuthRequest, 
         data: { status: newVersionStatus }
       });
     } else {
-      // Update plugin status based on decision
-      const newStatus = decision === "APPROVED" ? "APPROVED" : decision === "REJECTED" ? "REJECTED" : "PENDING_REVIEW";
-      await prisma.plugin.update({ where: { id: plugin.id }, data: { status: newStatus } });
+      // Determine new plugin status based on decision
+      let newPluginStatus: string;
+      if (decision === "APPROVED") {
+        newPluginStatus = "APPROVED";
+      } else if (decision === "REJECTED") {
+        // Check if plugin has any other approved versions — if so, keep plugin APPROVED
+        const approvedVersionCount = await prisma.version.count({
+          where: { pluginId: plugin.id, status: "APPROVED" }
+        });
+        newPluginStatus = approvedVersionCount > 0 ? "APPROVED" : "REJECTED";
+      } else {
+        newPluginStatus = "PENDING_REVIEW";
+      }
+      await prisma.plugin.update({ where: { id: plugin.id }, data: { status: newPluginStatus } });
       
       // Also approve/reject the latest version if we are approving the plugin
       const latestVersion = await prisma.version.findFirst({
@@ -84,6 +100,50 @@ reviewRouter.post("/:slug", requireAuth, requireAdmin, async (req: AuthRequest, 
           where: { id: latestVersion.id },
           data: { status: newVersionStatus }
         });
+
+        // Send Discord Webhook on approval
+        if (newVersionStatus === "APPROVED") {
+          const fullPlugin = await prisma.plugin.findUnique({
+            where: { id: plugin.id },
+            include: { author: true }
+          });
+          const fullVersion = await prisma.version.findUnique({
+            where: { id: latestVersion.id },
+            include: { producers: true }
+          });
+          if (fullPlugin && fullVersion && review.reviewer?.username) {
+            await sendPluginApprovedWebhook(fullPlugin, fullVersion, review.reviewer.username);
+          }
+        }
+
+        // ── Email Notifications ──────────────────────
+        const reviewerUsername = review.reviewer?.username || "Admin";
+        const authorEmail = plugin.author?.email;
+        const authorUsername = plugin.author?.username || "Developer";
+
+        if (authorEmail) {
+          if (decision === "REJECTED") {
+            await sendRejectionEmail({
+              to: authorEmail,
+              authorUsername,
+              pluginName: plugin.displayName,
+              pluginSlug: plugin.slug,
+              version: latestVersion.version,
+              submittedAt: latestVersion.createdAt.toISOString(),
+              reviewerUsername,
+              reason: comment || "Your plugin did not meet the submission requirements. Please review the guidelines and try again.",
+            });
+          } else if (decision === "APPROVED") {
+            await sendApprovalEmail({
+              to: authorEmail,
+              authorUsername,
+              pluginName: plugin.displayName,
+              pluginSlug: plugin.slug,
+              version: latestVersion.version,
+              reviewerUsername,
+            });
+          }
+        }
       }
     }
 
@@ -94,10 +154,15 @@ reviewRouter.post("/:slug", requireAuth, requireAdmin, async (req: AuthRequest, 
 });
 
 // GET /api/v1/reviews/admin/queue — Pending review queue (returns plugins)
-reviewRouter.get("/admin/queue", requireAuth, requireAdmin, async (_req: AuthRequest, res: Response) => {
+reviewRouter.get("/admin/queue", requireAuth, requireReviewer, async (_req: AuthRequest, res: Response) => {
   try {
     const pendingPlugins = await prisma.plugin.findMany({
-      where: { status: "PENDING_REVIEW" },
+      where: {
+        OR: [
+          { status: "PENDING_REVIEW" },
+          { versions: { some: { status: "PENDING" } } }
+        ]
+      },
       orderBy: { createdAt: "asc" },
       include: {
         author: { select: { username: true, avatarUrl: true } },

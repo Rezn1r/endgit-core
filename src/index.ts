@@ -24,7 +24,7 @@ import { webhookRouter } from "./routes/webhooks";
 import { callbackRouter } from "./routes/callback";
 
 const app: express.Express = express();
-const PORT = process.env.API_PORT || 4000;
+const PORT = process.env.PORT || process.env.API_PORT || 4000;
 
 // ── Middleware ────────────────────────────────────────────
 

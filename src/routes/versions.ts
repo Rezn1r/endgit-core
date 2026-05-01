@@ -66,11 +66,11 @@ versionsRouter.post("/:slug", requireAuth, async (req: AuthRequest, res: Respons
 
       if (plugin.pluginType === "CPP") {
         actualFileUrl = JSON.stringify({ linux: build.artifactUrlLinux, win: build.artifactUrlWin });
-        actualFileName = `plugin-${version}-cpp`;
+        actualFileName = `${plugin.slug}-${version}`;
         actualFileSize = (build.artifactSizeLinux || 0) + (build.artifactSizeWin || 0);
       } else {
         actualFileUrl = build.artifactUrl;
-        actualFileName = `plugin-${version}.zip`; // Placeholder name from build
+        actualFileName = `${plugin.slug}-${version}.zip`; // Placeholder name from build
         actualFileSize = build.artifactSize || 0;
       }
       actualFileHash = "sha256-from-build"; // In a real system, calculate or store this in build

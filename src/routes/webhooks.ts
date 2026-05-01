@@ -88,6 +88,41 @@ webhookRouter.post("/github", async (req: Request, res: Response) => {
       return res.json({ success: true, message: "Already building" });
     }
 
+    // ── Weekly Build Quota Check ──
+    const author = await prisma.user.findUnique({
+      where: { id: plugin.authorId },
+      select: { id: true, weeklyBuildQuota: true, weeklyBuildCount: true, quotaResetAt: true }
+    });
+
+    if (author) {
+      const now = new Date();
+      let currentCount = author.weeklyBuildCount;
+
+      // Reset counter if 7 days have passed
+      if (now >= author.quotaResetAt) {
+        const nextReset = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
+        await prisma.user.update({
+          where: { id: author.id },
+          data: { weeklyBuildCount: 0, quotaResetAt: nextReset }
+        });
+        currentCount = 0;
+      }
+
+      if (currentCount >= author.weeklyBuildQuota) {
+        console.log(`[Webhook] 🚫 User ${author.id} exceeded weekly build quota (${currentCount}/${author.weeklyBuildQuota})`);
+        return res.status(429).json({
+          success: false,
+          error: `Weekly build quota exceeded (${author.weeklyBuildQuota} builds/week). Contact an admin to increase your quota.`
+        });
+      }
+
+      // Increment build count
+      await prisma.user.update({
+        where: { id: author.id },
+        data: { weeklyBuildCount: { increment: 1 } }
+      });
+    }
+
     console.log(`[Webhook] 🔨 Triggering build for ${plugin.slug} (${branch}@${commitHash?.slice(0, 7)}) by ${pusher}`);
 
     // Check for .endgit.yml config — if branch filter is set, respect it

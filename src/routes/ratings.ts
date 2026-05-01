@@ -5,6 +5,7 @@
 import { Router, Request, Response } from "express";
 import { prisma } from "@endgit/database";
 import { requireAuth, optionalAuth, AuthRequest } from "../middleware/auth";
+import { sendNewRatingWebhook } from "../utils/discord";
 
 export const ratingRouter: Router = Router();
 
@@ -103,6 +104,11 @@ ratingRouter.post("/:slug", requireAuth, async (req: AuthRequest, res: Response)
       where: { id: plugin.id },
       data: { stars: Math.round((avgResult._avg.score || 0) * 20) } // Convert 1-5 to 0-100 scale
     });
+
+    // Send Discord Webhook
+    if (rating.user?.username) {
+      await sendNewRatingWebhook(plugin, rating, rating.user.username);
+    }
 
     res.status(201).json({ success: true, data: rating });
   } catch (error: any) {
