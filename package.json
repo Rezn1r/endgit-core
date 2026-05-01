@@ -6,8 +6,8 @@
   "scripts": {
     "dev": "tsx watch src/index.ts",
     "build": "tsc",
-    "start": "node dist/index.js",
-    "heroku-postbuild": "pnpm run db:generate && pnpm run build",
+    "start": "tsx src/index.ts",
+    "heroku-postbuild": "pnpm run db:generate",
     "db:generate": "pnpm --filter @endgit/database generate",
     "db:push": "pnpm --filter @endgit/database push",
     "db:migrate": "pnpm --filter @endgit/database migrate",
@@ -36,7 +36,8 @@
     "morgan": "^1.10.0",
     "multer": "^1.4.5-lts.1",
     "nodemailer": "^8.0.7",
-    "semver": "^7.6.0"
+    "semver": "^7.6.0",
+    "tsx": "^4.19.0"
   },
   "devDependencies": {
     "@types/bcryptjs": "^2.4.6",
@@ -47,7 +48,6 @@
     "@types/multer": "^1.4.12",
     "@types/nodemailer": "^8.0.0",
     "@types/semver": "^7.5.8",
-    "tsx": "^4.19.0",
     "typescript": "^5.6.0"
   },
   "license": "AGPL-3.0-only",
