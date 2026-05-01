@@ -87,6 +87,7 @@ pluginRouter.get("/", optionalAuth, async (req: AuthRequest, res: Response) => {
             },
           },
           versions: {
+            where: { status: "APPROVED" },
             orderBy: { createdAt: "desc" },
             select: { version: true },
             take: 1,
@@ -196,6 +197,7 @@ pluginRouter.get("/trending", async (_req: Request, res: Response) => {
           select: { username: true, displayName: true, avatarUrl: true },
         },
         versions: {
+          where: { status: "APPROVED" },
           orderBy: { createdAt: "desc" },
           select: { version: true },
           take: 1,
@@ -231,6 +233,7 @@ pluginRouter.get("/latest", async (_req: Request, res: Response) => {
           select: { username: true, displayName: true, avatarUrl: true },
         },
         versions: {
+          where: { status: "APPROVED" },
           orderBy: { createdAt: "desc" },
           select: { version: true },
           take: 1,
@@ -307,20 +310,31 @@ pluginRouter.get("/:slug", optionalAuth, async (req: Request, res: Response) => 
       });
     }
 
+    // Filter versions: non-authors/admins only see APPROVED versions
+    const visibleVersions = (isAuthor || isAdmin)
+      ? plugin.versions
+      : plugin.versions.filter((v: any) => v.status === "APPROVED");
+
     const totalRatings = plugin.ratings.length;
     const averageRating =
       totalRatings > 0
         ? plugin.ratings.reduce((sum: number, r: any) => sum + r.score, 0) / totalRatings
         : 0;
 
+    // For non-authors, latestVersion should be the latest APPROVED version
+    const latestApprovedVersion = visibleVersions.find((v: any) => v.isLatest)?.version
+      || visibleVersions[0]?.version
+      || null;
+
     res.json({
       success: true,
       data: {
         ...plugin,
+        versions: visibleVersions,
         ratings: undefined,
         averageRating: Math.round(averageRating * 10) / 10,
         totalRatings,
-        latestVersion: plugin.versions.find((v: any) => v.isLatest)?.version || null,
+        latestVersion: latestApprovedVersion,
       },
     });
   } catch (error: any) {

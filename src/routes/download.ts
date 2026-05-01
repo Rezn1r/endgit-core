@@ -49,11 +49,11 @@ downloadRouter.get("/:slug/:version", async (req: Request, res: Response) => {
     // Extract the actual storage key from fileUrl
     // fileUrl may be stored as "/api/v1/download/file/encodedKey", a raw key, or a JSON string for CPP plugins
     let storageKey = version.fileUrl;
+    const platform = req.query.platform as string;
     
     try {
       if (storageKey.startsWith("{")) {
         const parsed = JSON.parse(storageKey);
-        const platform = req.query.platform as string;
         if (platform === "windows") {
           storageKey = parsed.win;
         } else if (platform === "linux") {
@@ -92,7 +92,22 @@ downloadRouter.get("/:slug/:version", async (req: Request, res: Response) => {
       })
     ]);
 
-    res.setHeader("Content-Disposition", `attachment; filename="${decodeURIComponent(path.basename(version.fileName))}"`);
+    let finalFileName = decodeURIComponent(path.basename(version.fileName));
+    
+    // Fix for legacy versions that were saved with "plugin-" prefix
+    if (finalFileName.startsWith("plugin-")) {
+      finalFileName = finalFileName.replace("plugin-", `${plugin.slug}-`);
+    }
+
+    if (plugin.pluginType === "CPP" && platform) {
+      if (platform === "windows" && !finalFileName.endsWith(".dll")) {
+        finalFileName += ".dll";
+      } else if (platform === "linux" && !finalFileName.endsWith(".so")) {
+        finalFileName += ".so";
+      }
+    }
+
+    res.setHeader("Content-Disposition", `attachment; filename="${finalFileName}"`);
     res.setHeader("Content-Length", file.length.toString());
     res.setHeader("X-File-Hash", version.fileHash);
     res.send(file);

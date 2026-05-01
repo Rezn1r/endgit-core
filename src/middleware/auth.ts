@@ -101,6 +101,31 @@ export function requireAdmin(
 }
 
 /**
+ * Reviewer-only middleware — requires TRUSTED or ADMIN trust level
+ */
+export function requireReviewer(
+  req: AuthRequest,
+  res: Response,
+  next: NextFunction
+) {
+  if (!req.user) {
+    return res.status(401).json({
+      success: false,
+      error: "Authentication required",
+    });
+  }
+
+  if (req.user.trustLevel !== "ADMIN" && req.user.trustLevel !== "TRUSTED") {
+    return res.status(403).json({
+      success: false,
+      error: "Reviewer access required",
+    });
+  }
+
+  next();
+}
+
+/**
  * Generate JWT token for a user
  */
 export function generateToken(user: {

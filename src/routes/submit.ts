@@ -30,7 +30,11 @@ submitRouter.post("/:buildId", requireAuth, async (req: AuthRequest, res: Respon
       return res.status(400).json({ success: false, error: "Only successful builds can be submitted for review" });
     }
 
-    if (build.plugin.status === "PENDING_REVIEW") {
+    const hasPendingVersion = await prisma.version.findFirst({
+      where: { pluginId: build.pluginId, status: "PENDING" }
+    });
+
+    if (hasPendingVersion || build.plugin.status === "PENDING_REVIEW") {
       return res.status(400).json({ success: false, error: "A version is currently pending review. Please wait for it to be approved or rejected." });
     }
 
@@ -43,7 +47,7 @@ submitRouter.post("/:buildId", requireAuth, async (req: AuthRequest, res: Respon
       return res.status(400).json({ success: false, error: `You cannot submit a build older than or equal to the latest submitted build (#${latestRelease.buildNumber}).` });
     }
 
-    const { version, displayName, description, longDescription, tags, license, iconPath, producers, changelog, supportedApis } = req.body;
+    const { version, displayName, description, longDescription, tags, keywords, license, iconPath, producers, changelog, supportedApis } = req.body;
 
     if (!version || !displayName) {
       return res.status(400).json({ success: false, error: "Version and Display Name are required" });
@@ -53,8 +57,8 @@ submitRouter.post("/:buildId", requireAuth, async (req: AuthRequest, res: Respon
     const existingVersion = await prisma.version.findFirst({
       where: { pluginId: build.plugin.id, version }
     });
-    if (existingVersion) {
-      return res.status(400).json({ success: false, error: `Version ${version} already exists for this plugin.` });
+    if (existingVersion && existingVersion.status !== "REJECTED") {
+      return res.status(400).json({ success: false, error: `Version ${version} already exists and is not rejected. Please increment your version number.` });
     }
 
     // 2. Validate Producers and GitHub Usernames
@@ -87,7 +91,13 @@ submitRouter.post("/:buildId", requireAuth, async (req: AuthRequest, res: Respon
     // Process tags (comma separated)
     let processedTags: string[] = [];
     if (tags && typeof tags === "string") {
-      processedTags = tags.split(",").map(t => t.trim()).filter(Boolean);
+      processedTags = tags.split(",").map(t => t.replace(/<[^>]*>?/gm, '').trim()).filter(Boolean);
+    }
+
+    // Process keywords (comma separated)
+    let processedKeywords: string[] = [];
+    if (keywords && typeof keywords === "string") {
+      processedKeywords = keywords.split(",").map(k => k.replace(/<[^>]*>?/gm, '').trim()).filter(Boolean);
     }
 
     // Process Icon URL
@@ -102,6 +112,8 @@ submitRouter.post("/:buildId", requireAuth, async (req: AuthRequest, res: Respon
     // Transaction to update Plugin and Create Version with Producers
     await prisma.$transaction(async (tx) => {
       const existingPlugin = await tx.plugin.findUnique({ where: { id: build.plugin.id } });
+      // Already-approved plugins stay APPROVED (version goes to PENDING independently)
+      // Only DRAFT/BUILD_FAILED/REJECTED plugins go to PENDING_REVIEW
       const newStatus = existingPlugin?.status === "APPROVED" ? "APPROVED" : "PENDING_REVIEW";
 
       // Update plugin metadata and status
@@ -114,6 +126,7 @@ submitRouter.post("/:buildId", requireAuth, async (req: AuthRequest, res: Respon
           description: description || build.plugin.name,
           longDescription: longDescription || "",
           tags: processedTags,
+          keywords: processedKeywords,
           license: license || "",
           iconUrl,
         }
@@ -132,28 +145,55 @@ submitRouter.post("/:buildId", requireAuth, async (req: AuthRequest, res: Respon
         versionFileSize = (build.artifactSizeLinux || 0) + (build.artifactSizeWin || 0);
       }
 
-      // Create Version with Producers
-      await tx.version.create({
-        data: {
-          pluginId: build.plugin.id,
-          version,
-          fileUrl: versionFileUrl,
-          fileName: versionFileName,
-          fileSize: versionFileSize,
-          fileHash: build.commitHash || "",
-          status: "PENDING",
-          changelog: changelog || req.body.notes || "",
-          longDescription: longDescription || "",
-          supportedApis: Array.isArray(supportedApis) ? supportedApis : [],
-          isLatest: true,
-          producers: {
-            create: producers.map((p: any) => ({
-              githubUser: p.githubUser.trim(),
-              role: p.role
-            }))
+      // Create or Update Version with Producers
+      if (existingVersion) {
+        // Delete old producers first
+        await tx.producer.deleteMany({ where: { versionId: existingVersion.id } });
+        // Update existing version
+        await tx.version.update({
+          where: { id: existingVersion.id },
+          data: {
+            fileUrl: versionFileUrl,
+            fileName: versionFileName,
+            fileSize: versionFileSize,
+            fileHash: build.commitHash || "",
+            status: "PENDING",
+            changelog: changelog || req.body.notes || "",
+            longDescription: longDescription || "",
+            supportedApis: Array.isArray(supportedApis) ? supportedApis : [],
+            isLatest: true,
+            createdAt: new Date(), // Reset createdAt so it bumps up
+            producers: {
+              create: producers.map((p: any) => ({
+                githubUser: p.githubUser.trim(),
+                role: p.role
+              }))
+            }
           }
-        }
-      });
+        });
+      } else {
+        await tx.version.create({
+          data: {
+            pluginId: build.plugin.id,
+            version,
+            fileUrl: versionFileUrl,
+            fileName: versionFileName,
+            fileSize: versionFileSize,
+            fileHash: build.commitHash || "",
+            status: "PENDING",
+            changelog: changelog || req.body.notes || "",
+            longDescription: longDescription || "",
+            supportedApis: Array.isArray(supportedApis) ? supportedApis : [],
+            isLatest: true,
+            producers: {
+              create: producers.map((p: any) => ({
+                githubUser: p.githubUser.trim(),
+                role: p.role
+              }))
+            }
+          }
+        });
+      }
 
       // Mark build as release
       await tx.build.update({

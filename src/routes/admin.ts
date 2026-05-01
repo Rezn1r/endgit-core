@@ -36,6 +36,7 @@ adminRouter.get("/users", requireAuth, requireAdmin, async (req: AuthRequest, re
         select: {
           id: true, username: true, displayName: true, email: true,
           avatarUrl: true, trustLevel: true, createdAt: true,
+          weeklyBuildQuota: true, weeklyBuildCount: true, quotaResetAt: true,
           _count: { select: { plugins: true, reviews: true, ratings: true } }
         }
       }),
@@ -67,6 +68,29 @@ adminRouter.patch("/users/:id/trust", requireAuth, requireAdmin, async (req: Aut
     res.json({ success: true, data: user });
   } catch (error: any) {
     res.status(500).json({ success: false, error: "Failed to update trust level" });
+  }
+});
+
+/**
+ * PATCH /api/v1/admin/users/:id/quota — Change user weekly build quota
+ */
+adminRouter.patch("/users/:id/quota", requireAuth, requireAdmin, async (req: AuthRequest, res: Response) => {
+  try {
+    const { weeklyBuildQuota } = req.body;
+    const quota = parseInt(weeklyBuildQuota);
+    if (isNaN(quota) || quota < 1 || quota > 10000) {
+      return res.status(400).json({ success: false, error: "Quota must be between 1 and 10000" });
+    }
+
+    const user = await prisma.user.update({
+      where: { id: String(req.params.id) },
+      data: { weeklyBuildQuota: quota },
+      select: { id: true, username: true, weeklyBuildQuota: true }
+    });
+
+    res.json({ success: true, data: user });
+  } catch (error: any) {
+    res.status(500).json({ success: false, error: "Failed to update quota" });
   }
 });
 
