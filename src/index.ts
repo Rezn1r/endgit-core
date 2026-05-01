@@ -31,7 +31,10 @@ const PORT = process.env.PORT || process.env.API_PORT || 4000;
 app.use(helmet());
 app.use(
   cors({
-    origin: process.env.NEXTAUTH_URL || "http://localhost:3000",
+    origin: [
+      process.env.NEXTAUTH_URL || "http://localhost:3000",
+      "http://localhost:3000" // Always allow localhost for local development
+    ],
     credentials: true,
   })
 );
