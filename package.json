@@ -6,8 +6,8 @@
     "scripts": {
         "dev": "tsx watch src/index.ts",
         "build": "tsc",
-        "start": "tsx src/index.ts",
-        "heroku-postbuild": "pnpm run db:generate && pnpm --filter @endgit/types build && pnpm --filter @endgit/storage build && pnpm --filter @endgit/database build",
+        "start": "node dist/index.js",
+        "heroku-postbuild": "pnpm run db:generate && pnpm --filter @endgit/types build && pnpm --filter @endgit/storage build && pnpm --filter @endgit/database build && pnpm run build",
         "db:generate": "pnpm --filter @endgit/database generate",
         "db:push": "pnpm --filter @endgit/database push",
         "db:migrate": "pnpm --filter @endgit/database migrate",
