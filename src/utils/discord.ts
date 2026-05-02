@@ -7,14 +7,18 @@ export async function sendPluginApprovedWebhook(plugin: any, version: any, revie
     ? version.producers.map((p: any) => `${p.role}: ${p.githubUser}`).join("\n")
     : `Author: ${plugin.author?.username || "Unknown"}`;
 
+  const pluginUrl = `https://endgit.dev/plugins/${plugin.slug}`;
+
   const embed = {
     title: `${plugin.displayName} v${version.version}`,
+    url: pluginUrl,
     description: plugin.description || `Plugin for Endstone`,
     color: 0x2ecc71, // Green
     fields: [
       { name: "Category", value: category, inline: false },
       { name: "Author", value: authorStr, inline: false },
-      { name: "State", value: `Approved by @${reviewerUsername}`, inline: false }
+      { name: "State", value: `Approved by @${reviewerUsername}`, inline: false },
+      { name: "Link", value: `[View on EndGit](${pluginUrl})`, inline: false }
     ],
     timestamp: new Date().toISOString()
   };
@@ -41,10 +45,11 @@ export async function sendNewRatingWebhook(plugin: any, rating: any, reviewerNam
   const webhookUrl = process.env.DISCORD_WEBHOOK_NEW_RATING;
   if (!webhookUrl) return;
 
-  const pluginUrl = `https://endgit.com/plugins/${plugin.slug}`;
+  const pluginUrl = `https://endgit.dev/plugins/${plugin.slug}`;
   
   const embed = {
-    title: `New Review on\n${pluginUrl}`,
+    title: `New Review on ${plugin.displayName || plugin.name}`,
+    url: pluginUrl,
     description: `Made by ${reviewerName}!`,
     color: 0x3498db, // Blue
     fields: [
