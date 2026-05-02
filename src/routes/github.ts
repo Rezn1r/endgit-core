@@ -368,3 +368,57 @@ githubRouter.post("/repos/:pluginId/disable", requireAuth, async (req: AuthReque
     res.status(500).json({ success: false, error: "Failed to disable CI" });
   }
 });
+
+/**
+ * GET /api/v1/github/repo-readme?owner=X&repo=Y — Proxy GitHub README fetch (authenticated)
+ */
+githubRouter.get("/repo-readme", requireAuth, async (req: AuthRequest, res: Response) => {
+  try {
+    const { owner, repo } = req.query;
+    if (!owner || !repo) {
+      return res.status(400).json({ success: false, error: "Missing owner or repo" });
+    }
+
+    const accessToken = await getAccessToken(req.user!.id);
+    const headers: any = { Accept: "application/vnd.github.v3.raw", "User-Agent": "EndGit-CI" };
+    if (accessToken) headers.Authorization = `Bearer ${accessToken}`;
+
+    const ghRes = await fetch(`https://api.github.com/repos/${owner}/${repo}/readme`, { headers });
+    if (!ghRes.ok) {
+      return res.status(ghRes.status).json({ success: false, error: "README not found" });
+    }
+
+    const text = await ghRes.text();
+    res.json({ success: true, data: text });
+  } catch (error: any) {
+    console.error("Proxy README error:", error);
+    res.status(500).json({ success: false, error: "Failed to fetch README" });
+  }
+});
+
+/**
+ * GET /api/v1/github/repo-license?owner=X&repo=Y — Proxy GitHub license fetch (authenticated)
+ */
+githubRouter.get("/repo-license", requireAuth, async (req: AuthRequest, res: Response) => {
+  try {
+    const { owner, repo } = req.query;
+    if (!owner || !repo) {
+      return res.status(400).json({ success: false, error: "Missing owner or repo" });
+    }
+
+    const accessToken = await getAccessToken(req.user!.id);
+    const headers: any = { Accept: "application/vnd.github.v3+json", "User-Agent": "EndGit-CI" };
+    if (accessToken) headers.Authorization = `Bearer ${accessToken}`;
+
+    const ghRes = await fetch(`https://api.github.com/repos/${owner}/${repo}/license`, { headers });
+    if (!ghRes.ok) {
+      return res.status(ghRes.status).json({ success: false, error: "License not found" });
+    }
+
+    const data = await ghRes.json();
+    res.json({ success: true, data: data.license });
+  } catch (error: any) {
+    console.error("Proxy license error:", error);
+    res.status(500).json({ success: false, error: "Failed to fetch license" });
+  }
+});
