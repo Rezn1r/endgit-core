@@ -27,7 +27,7 @@ ratingRouter.get("/:slug", async (req: Request, res: Response) => {
         skip,
         take: limit,
         orderBy: { createdAt: "desc" },
-        include: { user: { select: { username: true, displayName: true, avatarUrl: true, trustLevel: true } } }
+        include: { user: { select: { id: true, username: true, displayName: true, avatarUrl: true, trustLevel: true } } }
       }),
       prisma.rating.count({ where: { pluginId: plugin.id } })
     ]);
@@ -91,7 +91,7 @@ ratingRouter.post("/:slug", requireAuth, async (req: AuthRequest, res: Response)
         score,
         comment: comment || null,
       },
-      include: { user: { select: { username: true, displayName: true, avatarUrl: true, trustLevel: true } } }
+      include: { user: { select: { id: true, username: true, displayName: true, avatarUrl: true, trustLevel: true } } }
     });
 
     // Update plugin's star count
@@ -131,5 +131,39 @@ ratingRouter.delete("/:slug", requireAuth, async (req: AuthRequest, res: Respons
     res.json({ success: true, message: "Rating deleted" });
   } catch (error: any) {
     res.status(500).json({ success: false, error: "Failed to delete rating" });
+  }
+});
+
+/**
+ * POST /api/v1/ratings/:slug/:ratingId/reply — Plugin owner replies to a rating
+ */
+ratingRouter.post("/:slug/:ratingId/reply", requireAuth, async (req: AuthRequest, res: Response) => {
+  try {
+    const plugin = await prisma.plugin.findUnique({ where: { slug: String(req.params.slug) } });
+    if (!plugin) return res.status(404).json({ success: false, error: "Plugin not found" });
+
+    // Only plugin owner can reply
+    if (plugin.authorId !== req.user!.id) {
+      return res.status(403).json({ success: false, error: "Only the plugin author can reply to ratings" });
+    }
+
+    const { reply } = req.body;
+    if (!reply || reply.trim().length === 0) {
+      return res.status(400).json({ success: false, error: "Reply comment cannot be empty" });
+    }
+
+    const rating = await prisma.rating.update({
+      where: { id: String(req.params.ratingId) },
+      data: {
+        ownerReply: reply.trim(),
+        repliedAt: new Date(),
+      },
+      include: { user: { select: { id: true, username: true, displayName: true, avatarUrl: true, trustLevel: true } } }
+    });
+
+    res.json({ success: true, data: rating });
+  } catch (error: any) {
+    console.error("Reply error:", error);
+    res.status(500).json({ success: false, error: "Failed to submit reply" });
   }
 });
