@@ -179,7 +179,13 @@ githubRouter.post("/repos/:repoId/enable", requireAuth, async (req: AuthRequest,
     }
 
     const slug = name.toLowerCase().replace(/[^a-z0-9-]/g, "-").replace(/-+/g, "-");
-    const pluginType = language === "C++" ? "CPP" : "PYTHON";
+    
+    // Strict language filter
+    if (language !== "C++" && language !== "Python" && language !== "C") {
+      return res.status(400).json({ success: false, error: `Unsupported repository language: ${language || 'Unknown'}. Only C++ and Python are supported for Endstone plugins.` });
+    }
+
+    const pluginType = (language === "C++" || language === "C") ? "CPP" : "PYTHON";
 
     // Get access token for webhook creation
     const accessToken = await getAccessToken(req.user!.id);
@@ -202,16 +208,37 @@ githubRouter.post("/repos/:repoId/enable", requireAuth, async (req: AuthRequest,
     if (contentsRes.ok) {
       const contents = await contentsRes.json();
       if (Array.isArray(contents)) {
-        const fileNames = contents.map((file: any) => file.name.toLowerCase());
-        const hasEndstoneIndicator = fileNames.includes('pyproject.toml') || 
-                                     fileNames.includes('setup.py') || 
-                                     fileNames.includes('cmakelists.txt') || 
-                                     fileNames.includes('src');
-                                     
-        if (!hasEndstoneIndicator) {
+        let isValidEndstone = false;
+
+        const checkFileContent = async (exactFilename: string) => {
+          try {
+            const fileRes = await fetch(`https://api.github.com/repos/${owner}/${repo}/contents/${exactFilename}`, {
+              headers: { Authorization: `Bearer ${accessToken}`, Accept: "application/vnd.github.v3+json", "User-Agent": "EndGit-CI" }
+            });
+            if (fileRes.ok) {
+              const fileData = await fileRes.json();
+              if (fileData.content) {
+                const decodedContent = Buffer.from(fileData.content, 'base64').toString('utf-8').toLowerCase();
+                return decodedContent.includes('endstone');
+              }
+            }
+          } catch (e) { console.warn("Failed to read file", exactFilename); }
+          return false;
+        };
+
+        const checkCandidates = ['pyproject.toml', 'cmakelists.txt', 'setup.py', 'requirements.txt'];
+        for (const candidate of checkCandidates) {
+          if (isValidEndstone) break;
+          const matchedFile = contents.find((f: any) => f.name.toLowerCase() === candidate);
+          if (matchedFile) {
+            isValidEndstone = await checkFileContent(matchedFile.name);
+          }
+        }
+
+        if (!isValidEndstone) {
           return res.status(400).json({ 
             success: false, 
-            error: "Repository does not appear to be an Endstone plugin (missing pyproject.toml, setup.py, CMakeLists.txt, or src folder)." 
+            error: "Repository does not appear to be an Endstone plugin. The word 'endstone' must exist in pyproject.toml, CMakeLists.txt, setup.py, or requirements.txt." 
           });
         }
       }
