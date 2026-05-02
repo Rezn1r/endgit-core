@@ -14,6 +14,7 @@ dashboardRouter.get("/status", requireAuth, async (req: AuthRequest, res: Respon
     });
     
     let hasAppInstalled = false;
+    let githubTokenExpired = false;
     
     if (account?.access_token) {
       const ghRes = await fetch("https://api.github.com/user/installations", {
@@ -35,8 +36,13 @@ dashboardRouter.get("/status", requireAuth, async (req: AuthRequest, res: Respon
           (inst.app_slug && inst.app_slug.includes("endgit"))
         ) || false;
       } else {
+        if (ghRes.status === 401) {
+          githubTokenExpired = true;
+        }
         console.error("Failed to fetch GitHub installations:", ghRes.status, await ghRes.text());
       }
+    } else {
+      githubTokenExpired = true;
     }
     // Fetch user quota info
     const user = await prisma.user.findUnique({
@@ -59,7 +65,7 @@ dashboardRouter.get("/status", requireAuth, async (req: AuthRequest, res: Respon
       quota = { used, limit: user.weeklyBuildQuota, resetsAt: resetsAt.toISOString() };
     }
     
-    res.json({ success: true, data: { hasAppInstalled, quota } });
+    res.json({ success: true, data: { hasAppInstalled, githubTokenExpired, quota } });
   } catch (error: any) {
     console.error("Status check error:", error);
     res.status(500).json({ success: false, error: "Failed to check status" });
