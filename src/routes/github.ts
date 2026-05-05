@@ -129,7 +129,7 @@ githubRouter.get("/repos", requireAuth, async (req: AuthRequest, res: Response) 
 
     const existingPlugins = await prisma.plugin.findMany({
       where: { authorId: req.user!.id },
-      select: { id: true, repoUrl: true, slug: true, status: true, name: true }
+      select: { id: true, repoUrl: true, slug: true, status: true, name: true, webhookId: true }
     });
 
     const repoUrlMap = new Map(existingPlugins.map(p => [p.repoUrl, p]));
@@ -140,14 +140,13 @@ githubRouter.get("/repos", requireAuth, async (req: AuthRequest, res: Response) 
         id: repo.id,
         name: repo.name,
         fullName: repo.full_name,
+        htmlUrl: repo.html_url,
         description: repo.description,
         language: repo.language,
-        isPrivate: repo.private,
-        htmlUrl: repo.html_url,
+        private: repo.private,
         defaultBranch: repo.default_branch,
-        stargazersCount: repo.stargazers_count,
         updatedAt: repo.updated_at,
-        ciEnabled: !!linked,
+        ciEnabled: !!(linked && linked.webhookId),
         pluginId: linked?.id || null,
         pluginSlug: linked?.slug || null,
         pluginStatus: linked?.status || null,
@@ -174,7 +173,7 @@ githubRouter.post("/repos/:repoId/enable", requireAuth, async (req: AuthRequest,
     const existing = await prisma.plugin.findFirst({
       where: { repoUrl: htmlUrl, authorId: req.user!.id }
     });
-    if (existing) {
+    if (existing && existing.webhookId) {
       return res.status(409).json({ success: false, error: "CI already enabled for this repo" });
     }
 
@@ -252,19 +251,14 @@ githubRouter.post("/repos/:repoId/enable", requireAuth, async (req: AuthRequest,
 
     // Create or Update plugin entry
     let finalSlug = slug;
-    let existingPlugin = await prisma.plugin.findFirst({
-      where: { name: finalSlug, authorId: req.user!.id }
-    });
-
+    
     let plugin;
-    if (existingPlugin && !existingPlugin.repoUrl) {
-      // Re-link existing plugin
+    if (existing) {
+      // Re-enable CI on existing plugin
       plugin = await prisma.plugin.update({
-        where: { id: existingPlugin.id },
+        where: { id: existing.id },
         data: {
-          repoUrl: htmlUrl,
           webhookId: webhookId ? String(webhookId) : null,
-          status: "DRAFT"
         }
       });
     } else {
@@ -356,10 +350,12 @@ githubRouter.post("/repos/:pluginId/disable", requireAuth, async (req: AuthReque
       }
     }
 
-    // Soft delete: set status to DRAFT and remove repo link + webhook
+    // Soft disable CI: Remove webhook from GitHub and set webhookId to null
+    // We DO NOT change the status to DRAFT or remove repoUrl so that the plugin
+    // stays on the marketplace and the builds page doesn't 404.
     await prisma.plugin.update({
       where: { id: plugin.id },
-      data: { status: "DRAFT", repoUrl: null, webhookId: null }
+      data: { webhookId: null }
     });
 
     res.json({ success: true, message: "CI disabled and webhook removed" });
