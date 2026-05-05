@@ -80,13 +80,7 @@ webhookRouter.post("/github", async (req: Request, res: Response) => {
       return res.json({ success: true, message: "No plugin linked to this repo" });
     }
 
-    const activeBuild = await prisma.build.findFirst({
-      where: { pluginId: plugin.id, status: { in: ["QUEUED", "RUNNING"] } }
-    });
-    if (activeBuild) {
-      console.log(`[Webhook] ⏳ Plugin ${plugin.slug} is already building, skipping`);
-      return res.json({ success: true, message: "Already building" });
-    }
+
 
     // ── Weekly Build Quota Check ──
     const author = await prisma.user.findUnique({

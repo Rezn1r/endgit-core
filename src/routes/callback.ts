@@ -199,7 +199,7 @@ async function checkAndFinalizeBuild(buildId: string) {
   // Discord notification
   try {
     const webhookUrl = process.env.DISCORD_WEBHOOK_URL || "https://discord.com/api/webhooks/[REDACTED_WEBHOOK_URL]";
-    if (webhookUrl && anySuccess) {
+    if (webhookUrl) {
       const baseUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
       const buildLogLink = `${baseUrl}/builds/${buildId}`;
 
@@ -209,7 +209,7 @@ async function checkAndFinalizeBuild(buildId: string) {
       const embed = {
         title: `Plugin ${build.plugin.displayName || build.plugin.slug}, Build #${build.buildNumber}`,
         url: buildLogLink,
-        color: 8359053, // Purple color similar to Poggit
+        color: anySuccess ? 8359053 : 15548997, // Purple for success, Red for failure
         author: {
           name: build.plugin.author?.displayName || build.plugin.author?.username || "EndGit Author",
           icon_url: build.plugin.author?.avatarUrl || undefined,
@@ -230,7 +230,7 @@ async function checkAndFinalizeBuild(buildId: string) {
         body: JSON.stringify({
           username: "EndGit-CI",
           avatar_url: "https://github.com/fluidicon.png",
-          content: "A new cross-platform C++ build has been completed!",
+          content: anySuccess ? "A new cross-platform C++ build has been completed!" : "❌ A cross-platform C++ build has failed!",
           embeds: [embed]
         })
       });
