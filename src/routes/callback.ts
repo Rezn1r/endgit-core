@@ -200,7 +200,7 @@ async function checkAndFinalizeBuild(buildId: string) {
   try {
     const webhookUrl = process.env.DISCORD_WEBHOOK_URL || "https://discord.com/api/webhooks/[REDACTED_WEBHOOK_URL]";
     if (webhookUrl) {
-      const baseUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
+      const baseUrl = process.env.NEXT_PUBLIC_APP_URL || "https://endgit.dev";
       const buildLogLink = `${baseUrl}/builds/${buildId}`;
 
       const linuxLink = build.artifactUrlLinux ? `[🐧 Download .so](${baseUrl}${build.artifactUrlLinux})` : "❌ Failed";

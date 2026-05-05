@@ -178,7 +178,7 @@ githubRouter.post("/repos/:repoId/enable", requireAuth, async (req: AuthRequest,
     }
 
     const slug = name.toLowerCase().replace(/[^a-z0-9-]/g, "-").replace(/-+/g, "-");
-    
+
     // Strict language filter
     if (language !== "C++" && language !== "Python" && language !== "C") {
       return res.status(400).json({ success: false, error: `Unsupported repository language: ${language || 'Unknown'}. Only C++ and Python are supported for Endstone plugins.` });
@@ -235,9 +235,9 @@ githubRouter.post("/repos/:repoId/enable", requireAuth, async (req: AuthRequest,
         }
 
         if (!isValidEndstone) {
-          return res.status(400).json({ 
-            success: false, 
-            error: "Repository does not appear to be an Endstone plugin. The word 'endstone' must exist in pyproject.toml, CMakeLists.txt, setup.py, or requirements.txt." 
+          return res.status(400).json({
+            success: false,
+            error: "Repository does not appear to be an Endstone plugin. The word 'endstone' must exist in pyproject.toml, CMakeLists.txt, setup.py, or requirements.txt."
           });
         }
       }
@@ -249,9 +249,17 @@ githubRouter.post("/repos/:repoId/enable", requireAuth, async (req: AuthRequest,
     let webhookId: number | null = null;
     webhookId = await createGitHubWebhook(accessToken, owner, repo);
 
+    // If webhook creation failed, the user likely doesn't have admin access to the repo/org
+    if (!webhookId) {
+      return res.status(403).json({
+        success: false,
+        error: `Unable to create webhook for ${fullName}. If this is an organization repository, please ensure the EndGit GitHub App is installed on the organization. Go to https://github.com/apps/endgit-app and install it for the "${owner}" organization.`
+      });
+    }
+
     // Create or Update plugin entry
     let finalSlug = slug;
-    
+
     let plugin;
     if (existing) {
       // Re-enable CI on existing plugin
@@ -272,7 +280,7 @@ githubRouter.post("/repos/:repoId/enable", requireAuth, async (req: AuthRequest,
           isUnique = true;
         }
       }
-      
+
       plugin = await prisma.plugin.create({
         data: {
           name: finalSlug,
@@ -288,28 +296,30 @@ githubRouter.post("/repos/:repoId/enable", requireAuth, async (req: AuthRequest,
       });
     }
 
-    // Trigger initial build
-    const buildNumber = await prisma.build.count({ where: { pluginId: plugin.id } }) + 1;
-    const build = await prisma.build.create({
-      data: {
-        buildNumber,
+    if (!existing) {
+      // Trigger initial build only if plugin was just created
+      const buildNumber = await prisma.build.count({ where: { pluginId: plugin.id } }) + 1;
+      const build = await prisma.build.create({
+        data: {
+          buildNumber,
+          pluginId: plugin.id,
+          status: "QUEUED",
+          branch: defaultBranch || "main",
+          commitMessage: "Initial build triggered by enabling CI",
+          triggerType: "MANUAL",
+        }
+      });
+
+      await buildQueue.add("build-plugin", {
         pluginId: plugin.id,
-        status: "QUEUED",
+        pluginSlug: plugin.slug,
+        repoUrl: plugin.repoUrl,
+        buildId: build.id,
+        userId: plugin.authorId,
         branch: defaultBranch || "main",
         commitMessage: "Initial build triggered by enabling CI",
-        triggerType: "MANUAL",
-      }
-    });
-
-    await buildQueue.add("build-plugin", {
-      pluginId: plugin.id,
-      pluginSlug: plugin.slug,
-      repoUrl: plugin.repoUrl,
-      buildId: build.id,
-      userId: plugin.authorId,
-      branch: defaultBranch || "main",
-      commitMessage: "Initial build triggered by enabling CI",
-    });
+      });
+    }
 
     // Removed plugin status update to preserve marketplace lifecycle
     res.status(201).json({
