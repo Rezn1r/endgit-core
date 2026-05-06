@@ -81,22 +81,7 @@ export class RatingsService {
   }
 
   async replyToRating(slug: string, ratingId: string, reply: string, userId: string) {
-    const plugin = await prisma.plugin.findUnique({ where: { slug } });
-    if (!plugin) throw new Error("Plugin not found");
-
-    if (plugin.authorId !== userId) {
-      throw new Error("Only the plugin author can reply to ratings");
-    }
-
-    if (!reply || reply.trim().length === 0) {
-      throw new Error("Reply comment cannot be empty");
-    }
-
-    return await prisma.rating.update({
-      where: { id: ratingId },
-      data: { ownerReply: reply.trim(), repliedAt: new Date() },
-      include: { user: { select: { id: true, username: true, displayName: true, avatarUrl: true, trustLevel: true } } }
-    });
+    throw new Error("Replying to ratings is currently not supported in the database schema");
   }
 }
 

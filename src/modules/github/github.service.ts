@@ -164,7 +164,7 @@ export class GithubService {
               headers: { Authorization: `Bearer ${accessToken}`, Accept: "application/vnd.github.v3+json", "User-Agent": "EndGit-CI" }
             });
             if (fileRes.ok) {
-              const fileData = await fileRes.json();
+              const fileData = await fileRes.json() as any;
               if (fileData.content) {
                 const decodedContent = Buffer.from(fileData.content, 'base64').toString('utf-8').toLowerCase();
                 return decodedContent.includes('endstone');
@@ -293,7 +293,7 @@ export class GithubService {
     const ghRes = await fetch(`https://api.github.com/repos/${owner}/${repo}/license`, { headers });
     if (!ghRes.ok) throw new Error("License not found");
 
-    const data = await ghRes.json();
+    const data = await ghRes.json() as any;
     return data.license;
   }
 }

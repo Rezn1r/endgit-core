@@ -1,5 +1,6 @@
 import { prisma } from "@endgit/database";
 import { createStorage } from "@endgit/storage";
+import fs from "fs";
 
 const storage = createStorage();
 
@@ -38,7 +39,10 @@ export class CallbackService {
     const ext = platform === "windows" ? "dll" : "so";
     const artifactKey = `artifacts/${pluginSlug}/${build.buildNumber}/endstone_${pluginSlug}.${ext}`;
 
-    await storage.upload(artifactKey, file.buffer, "application/octet-stream");
+    const fileBuffer = await fs.promises.readFile(file.path);
+    await storage.upload(artifactKey, fileBuffer, "application/octet-stream");
+    await fs.promises.unlink(file.path).catch(err => console.error("Failed to delete temp file:", err));
+    
     const artifactUrl = `/api/v1/download/file/${encodeURIComponent(artifactKey)}`;
     const artifactSize = file.size;
 

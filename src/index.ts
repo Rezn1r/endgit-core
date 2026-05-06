@@ -8,6 +8,7 @@ import express from "express";
 import cors from "cors";
 import helmet from "helmet";
 import morgan from "morgan";
+import { publicRateLimit } from "./middleware/rateLimit";
 import { pluginsRouter } from "./modules/plugins/plugins.routes";
 import { versionsRouter } from "./modules/versions/versions.routes";
 import { downloadRouter } from "./modules/download/download.routes";
@@ -28,7 +29,19 @@ const PORT = process.env.PORT || process.env.API_PORT || 4000;
 
 // ── Middleware ────────────────────────────────────────────
 
-app.use(helmet());
+app.use(helmet({
+  contentSecurityPolicy: {
+    directives: {
+      defaultSrc: ["'self'"],
+      scriptSrc: ["'self'"],
+      styleSrc: ["'self'", "'unsafe-inline'"],
+      imgSrc: ["'self'", "data:", "https:"],
+      connectSrc: ["'self'"],
+    },
+  },
+  crossOriginEmbedderPolicy: false,
+}));
+app.use(publicRateLimit);
 app.use(
   cors({
     origin: [

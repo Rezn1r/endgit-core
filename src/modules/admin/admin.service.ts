@@ -36,7 +36,7 @@ export class AdminService {
 
     return await prisma.user.update({
       where: { id: userId },
-      data: { trustLevel },
+      data: { trustLevel: trustLevel as any },
       select: { id: true, username: true, trustLevel: true }
     });
   }
@@ -104,7 +104,7 @@ export class AdminService {
 
     return await prisma.plugin.update({
       where: { id: pluginId },
-      data: { status },
+      data: { status: status as any },
       select: { id: true, slug: true, status: true, displayName: true }
     });
   }
@@ -116,7 +116,7 @@ export class AdminService {
 
     return await prisma.version.update({
       where: { id: versionId },
-      data: { status },
+      data: { status: status as any },
       select: { id: true, version: true, status: true }
     });
   }
