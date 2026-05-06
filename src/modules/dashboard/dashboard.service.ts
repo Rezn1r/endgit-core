@@ -1,15 +1,9 @@
-// Dashboard Routes — Developer stats
-import { Router, Response } from "express";
 import { prisma } from "@endgit/database";
-import { requireAuth, AuthRequest } from "../middleware/auth";
 
-export const dashboardRouter: Router = Router();
-
-// GET /api/v1/dashboard/status — Check if user has installed the GitHub App
-dashboardRouter.get("/status", requireAuth, async (req: AuthRequest, res: Response) => {
-  try {
+export class DashboardService {
+  async getStatus(userId: string) {
     const account = await prisma.account.findFirst({
-      where: { userId: req.user!.id, provider: "github" },
+      where: { userId, provider: "github" },
       select: { access_token: true }
     });
     
@@ -39,14 +33,14 @@ dashboardRouter.get("/status", requireAuth, async (req: AuthRequest, res: Respon
         if (ghRes.status === 401) {
           githubTokenExpired = true;
         }
-        console.error("Failed to fetch GitHub installations:", ghRes.status, await ghRes.text());
+        console.error("Failed to fetch GitHub installations:", ghRes.status, await ghRes.text().catch(() => ""));
       }
     } else {
       githubTokenExpired = true;
     }
-    // Fetch user quota info
+
     const user = await prisma.user.findUnique({
-      where: { id: req.user!.id },
+      where: { id: userId },
       select: { weeklyBuildQuota: true, weeklyBuildCount: true, quotaResetAt: true }
     });
 
@@ -56,7 +50,6 @@ dashboardRouter.get("/status", requireAuth, async (req: AuthRequest, res: Respon
       let used = user.weeklyBuildCount;
       let resetsAt = user.quotaResetAt;
 
-      // If reset time has passed, show as 0 used
       if (now >= user.quotaResetAt) {
         used = 0;
         resetsAt = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
@@ -65,18 +58,12 @@ dashboardRouter.get("/status", requireAuth, async (req: AuthRequest, res: Respon
       quota = { used, limit: user.weeklyBuildQuota, resetsAt: resetsAt.toISOString() };
     }
     
-    res.json({ success: true, data: { hasAppInstalled, githubTokenExpired, quota } });
-  } catch (error: any) {
-    console.error("Status check error:", error);
-    res.status(500).json({ success: false, error: "Failed to check status" });
+    return { hasAppInstalled, githubTokenExpired, quota };
   }
-});
 
-// GET /api/v1/dashboard/plugins — My plugins
-dashboardRouter.get("/plugins", requireAuth, async (req: AuthRequest, res: Response) => {
-  try {
+  async getMyPlugins(userId: string) {
     const plugins = await prisma.plugin.findMany({
-      where: { authorId: req.user!.id },
+      where: { authorId: userId },
       orderBy: { updatedAt: "desc" },
       include: {
         versions: { where: { isLatest: true }, select: { version: true }, take: 1 },
@@ -84,7 +71,7 @@ dashboardRouter.get("/plugins", requireAuth, async (req: AuthRequest, res: Respo
       },
     });
 
-    const data = plugins.map((p: any) => ({
+    return plugins.map((p: any) => ({
       ...p,
       latestVersion: p.versions[0]?.version || null,
       versions: undefined,
@@ -93,33 +80,23 @@ dashboardRouter.get("/plugins", requireAuth, async (req: AuthRequest, res: Respo
       reportCount: p._count.reports,
       _count: undefined,
     }));
-
-    res.json({ success: true, data });
-  } catch (error: any) {
-    res.status(500).json({ success: false, error: "Failed to get plugins" });
   }
-});
 
-// GET /api/v1/dashboard/stats — Developer stats summary
-dashboardRouter.get("/stats", requireAuth, async (req: AuthRequest, res: Response) => {
-  try {
+  async getMyStats(userId: string) {
     const [totalPlugins, pluginAgg, totalVersions, pendingReviews] = await Promise.all([
-      prisma.plugin.count({ where: { authorId: req.user!.id } }),
-      prisma.plugin.aggregate({ where: { authorId: req.user!.id }, _sum: { downloads: true } }),
-      prisma.version.count({ where: { plugin: { authorId: req.user!.id } } }),
-      prisma.plugin.count({ where: { authorId: req.user!.id, status: "PENDING_REVIEW" } }),
+      prisma.plugin.count({ where: { authorId: userId } }),
+      prisma.plugin.aggregate({ where: { authorId: userId }, _sum: { downloads: true } }),
+      prisma.version.count({ where: { plugin: { authorId: userId } } }),
+      prisma.plugin.count({ where: { authorId: userId, status: "PENDING_REVIEW" } }),
     ]);
 
-    res.json({
-      success: true,
-      data: {
-        totalPlugins,
-        totalDownloads: pluginAgg._sum.downloads || 0,
-        totalVersions,
-        pendingReviews,
-      },
-    });
-  } catch (error: any) {
-    res.status(500).json({ success: false, error: "Failed to get stats" });
+    return {
+      totalPlugins,
+      totalDownloads: pluginAgg._sum.downloads || 0,
+      totalVersions,
+      pendingReviews,
+    };
   }
-});
+}
+
+export const dashboardService = new DashboardService();
