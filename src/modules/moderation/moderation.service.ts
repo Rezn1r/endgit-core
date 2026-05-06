@@ -8,7 +8,7 @@ export class ModerationService {
     if (!reason) throw new Error("reason is required");
 
     const report = await prisma.report.create({
-      data: { reason, details: details || null, reporterId, pluginId: plugin.id },
+      data: { reason: reason as any, details: details || null, reporterId, pluginId: plugin.id },
     });
 
     const unresolvedCount = await prisma.report.count({ where: { pluginId: plugin.id, resolved: false } });
@@ -50,7 +50,7 @@ export class ModerationService {
 
     return await prisma.user.update({
       where: { id: userId },
-      data: { trustLevel },
+      data: { trustLevel: trustLevel as any },
       select: { id: true, username: true, trustLevel: true },
     });
   }
