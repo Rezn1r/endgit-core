@@ -8,7 +8,7 @@ import express from "express";
 import cors from "cors";
 import helmet from "helmet";
 import morgan from "morgan";
-import { pluginRouter } from "./routes/plugins";
+import { pluginsRouter } from "./modules/plugins/plugins.routes";
 import { versionsRouter } from "./routes/versions";
 import { downloadRouter } from "./routes/download";
 import { authRouter } from "./routes/auth";
@@ -16,10 +16,10 @@ import { reviewRouter } from "./routes/reviews";
 import { moderationRouter } from "./routes/moderation";
 import { dashboardRouter } from "./routes/dashboard";
 import { buildRouter } from "./routes/builds";
-import { githubRouter } from "./routes/github";
+import { githubRouter } from "./modules/github/github.routes";
 import { adminRouter } from "./routes/admin";
 import { ratingRouter } from "./routes/ratings";
-import { submitRouter } from "./routes/submit";
+import { submitRouter } from "./modules/submit/submit.routes";
 import { webhookRouter } from "./routes/webhooks";
 import { callbackRouter } from "./routes/callback";
 
@@ -63,7 +63,7 @@ app.get("/api/v1/health", (_req, res) => {
 // ── Routes ───────────────────────────────────────────────
 
 app.use("/api/v1/auth", authRouter);
-app.use("/api/v1/plugins", pluginRouter);
+app.use("/api/v1/plugins", pluginsRouter);
 app.use("/api/v1/versions", versionsRouter);
 app.use("/api/v1/download", downloadRouter);
 app.use("/api/v1/reviews", reviewRouter);
