@@ -17,9 +17,12 @@ export class DownloadController {
 
   async downloadVersion(req: Request, res: Response) {
     try {
+      const ip = (req.headers["x-forwarded-for"] || req.socket.remoteAddress || "unknown").toString();
+
       const { file, fileName, fileHash } = await downloadService.downloadPluginVersion(
         String(req.params.slug),
         String(req.params.version),
+        ip,
         req.query.platform as string
       );
 

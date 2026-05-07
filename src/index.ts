@@ -52,7 +52,7 @@ app.use(
   })
 );
 app.use(morgan("dev"));
-app.use(express.json({ 
+app.use(express.json({
   limit: "1mb",
   verify: (req: any, res, buf) => {
     req.rawBody = buf;
