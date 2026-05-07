@@ -1,6 +1,10 @@
 import { prisma } from "@endgit/database";
 import { createStorage } from "@endgit/storage";
 import path from "path";
+import IORedis from "ioredis";
+
+const REDIS_URL = process.env.REDIS_URL || "redis://localhost:6379";
+const redis = new IORedis(REDIS_URL, { maxRetriesPerRequest: null });
 
 const storage = createStorage();
 
@@ -15,7 +19,7 @@ export class DownloadService {
     return { file, fileName };
   }
 
-  async downloadPluginVersion(slug: string, versionString: string, platform?: string) {
+  async downloadPluginVersion(slug: string, versionString: string, ip: string, platform?: string) {
     const plugin = await prisma.plugin.findUnique({ where: { slug } });
     if (!plugin) throw new Error("Plugin not found");
 
@@ -46,18 +50,25 @@ export class DownloadService {
 
     const file = await storage.download(storageKey);
 
-    const today = new Date();
-    today.setUTCHours(0, 0, 0, 0);
+    const redisKey = `download_spam:${version.id}:${ip}`;
+    const isSpam = await redis.get(redisKey);
 
-    await Promise.all([
-      prisma.version.update({ where: { id: version.id }, data: { downloads: { increment: 1 } } }),
-      prisma.plugin.update({ where: { id: plugin.id }, data: { downloads: { increment: 1 } } }),
-      prisma.pluginAnalytics.upsert({
-        where: { pluginId_date: { pluginId: plugin.id, date: today } },
-        update: { downloads: { increment: 1 } },
-        create: { pluginId: plugin.id, date: today, downloads: 1 }
-      })
-    ]);
+    if (!isSpam) {
+      await redis.set(redisKey, "1", "EX", 86400);
+
+      const today = new Date();
+      today.setUTCHours(0, 0, 0, 0);
+
+      await Promise.all([
+        prisma.version.update({ where: { id: version.id }, data: { downloads: { increment: 1 } } }),
+        prisma.plugin.update({ where: { id: plugin.id }, data: { downloads: { increment: 1 } } }),
+        prisma.pluginAnalytics.upsert({
+          where: { pluginId_date: { pluginId: plugin.id, date: today } },
+          update: { downloads: { increment: 1 } },
+          create: { pluginId: plugin.id, date: today, downloads: 1 }
+        })
+      ]);
+    }
 
     let finalFileName = decodeURIComponent(path.basename(version.fileName));
     
