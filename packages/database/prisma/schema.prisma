@@ -110,6 +110,7 @@ model Plugin {
   trustScore      Float        @default(0)
   qualityBadge    QualityBadge @default(NONE)
   isVerified      Boolean      @default(false)
+  isFeatured      Boolean      @default(false)
   reviewBuildId   String?      // Build ID currently submitted for review
   webhookId       String?      // GitHub webhook ID
   createdAt       DateTime     @default(now())

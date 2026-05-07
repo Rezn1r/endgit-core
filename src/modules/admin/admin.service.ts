@@ -120,6 +120,17 @@ export class AdminService {
       select: { id: true, version: true, status: true }
     });
   }
+
+  async toggleFeatured(pluginId: string) {
+    const plugin = await prisma.plugin.findUnique({ where: { id: pluginId }, select: { isFeatured: true } });
+    if (!plugin) throw new Error("Plugin not found");
+
+    return await prisma.plugin.update({
+      where: { id: pluginId },
+      data: { isFeatured: !plugin.isFeatured },
+      select: { id: true, slug: true, displayName: true, isFeatured: true }
+    });
+  }
 }
 
 export const adminService = new AdminService();

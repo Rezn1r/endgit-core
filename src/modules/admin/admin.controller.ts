@@ -74,6 +74,15 @@ export class AdminController {
       res.status(error.message.includes("Invalid") ? 400 : 500).json({ success: false, error: error.message || "Failed to update version status" });
     }
   }
+
+  async toggleFeatured(req: AuthRequest, res: Response) {
+    try {
+      const data = await adminService.toggleFeatured(String(req.params.id));
+      res.json({ success: true, data });
+    } catch (error: any) {
+      res.status(500).json({ success: false, error: error.message || "Failed to toggle featured" });
+    }
+  }
 }
 
 export const adminController = new AdminController();
