@@ -23,12 +23,28 @@ export class PluginsService {
     if (category) where.tags = { has: category };
     if (type && ["PYTHON", "CPP", "BOTH"].includes(type)) where.pluginType = type;
 
-    if (search) {
+    // Filter by author (username or GitHub org from repoUrl)
+    const author = query.author as string;
+    if (author) {
       where.OR = [
+        { author: { username: author } },
+        { repoUrl: { contains: `github.com/${author}/`, mode: "insensitive" } },
+      ];
+    }
+
+    if (search) {
+      const searchConditions = [
         { name: { contains: search, mode: "insensitive" } },
         { displayName: { contains: search, mode: "insensitive" } },
         { description: { contains: search, mode: "insensitive" } },
       ];
+      // If author filter already set OR, combine with AND
+      if (where.OR) {
+        where.AND = [{ OR: where.OR }, { OR: searchConditions }];
+        delete where.OR;
+      } else {
+        where.OR = searchConditions;
+      }
     }
 
     const orderBy: any = {};
