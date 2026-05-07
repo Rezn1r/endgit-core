@@ -182,14 +182,24 @@ export class PluginsService {
     if (!plugin) throw new Error("Plugin not found");
     if (plugin.authorId !== user.id && user.trustLevel !== "ADMIN") throw new Error("Not authorized");
 
-    const { displayName, description, longDescription, iconUrl, repoUrl, license, tags } = data;
+    // repoUrl cannot be changed after creation
+    const { displayName, description, longDescription, iconUrl, license, tags } = data;
+
+    // Check displayName uniqueness if changing
+    if (displayName && displayName !== plugin.displayName) {
+      const existing = await prisma.plugin.findFirst({
+        where: { displayName, id: { not: plugin.id } }
+      });
+      if (existing) throw new Error("A plugin with this display name already exists");
+    }
 
     return await prisma.plugin.update({
       where: { slug },
       data: {
-        ...(displayName && { displayName }), ...(description && { description }),
+        ...(displayName && { displayName }),
+        ...(description && { description }),
         ...(longDescription !== undefined && { longDescription }), ...(iconUrl !== undefined && { iconUrl }),
-        ...(repoUrl !== undefined && { repoUrl }), ...(license !== undefined && { license }),
+        ...(license !== undefined && { license }),
         ...(tags && { tags }),
       },
       include: { author: { select: { username: true, displayName: true, avatarUrl: true } } },
