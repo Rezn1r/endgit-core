@@ -54,24 +54,24 @@ export class ReviewsService {
         const approvedVersionCount = await prisma.version.count({ where: { pluginId: plugin.id, status: "APPROVED" } });
         newPluginStatus = approvedVersionCount > 0 ? "APPROVED" : "REJECTED";
       } else newPluginStatus = "PENDING_REVIEW";
-      
-      await prisma.plugin.update({ 
-        where: { id: plugin.id }, 
-        data: { 
+
+      await prisma.plugin.update({
+        where: { id: plugin.id },
+        data: {
           status: newPluginStatus as any,
           ...(decision === "REJECTED" && { reviewBuildId: null }),
-        } 
+        }
       });
-      
+
       // Find the pending version to update (not just any latest version)
-      const latestVersion = await prisma.version.findFirst({ 
-        where: { pluginId: plugin.id, status: "PENDING" }, 
-        orderBy: { createdAt: 'desc' } 
-      }) || await prisma.version.findFirst({ 
-        where: { pluginId: plugin.id }, 
-        orderBy: { createdAt: 'desc' } 
+      const latestVersion = await prisma.version.findFirst({
+        where: { pluginId: plugin.id, status: "PENDING" },
+        orderBy: { createdAt: 'desc' }
+      }) || await prisma.version.findFirst({
+        where: { pluginId: plugin.id },
+        orderBy: { createdAt: 'desc' }
       });
-      
+
       if (latestVersion) {
         const newVersionStatus = decision === "APPROVED" ? "APPROVED" : decision === "REJECTED" ? "REJECTED" : "PENDING";
         await prisma.version.update({ where: { id: latestVersion.id }, data: { status: newVersionStatus } });
@@ -163,7 +163,7 @@ EndGit (https://endgit.dev)`;
       orderBy: { createdAt: "asc" },
       include: {
         author: { select: { username: true, avatarUrl: true } },
-        versions: { orderBy: { createdAt: "desc" }, take: 1 },
+        versions: { orderBy: { createdAt: "desc" }, take: 1, select: { version: true, fileHash: true, status: true, createdAt: true } },
       },
     });
   }
