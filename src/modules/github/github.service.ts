@@ -3,7 +3,11 @@ import { Queue } from "bullmq";
 import IORedis from "ioredis";
 
 const REDIS_URL = process.env.REDIS_URL || "redis://localhost:6379";
-const connection = new IORedis(REDIS_URL, { maxRetriesPerRequest: null });
+const connection = new IORedis(REDIS_URL, {
+  maxRetriesPerRequest: null,
+  family: 4,
+  tls: REDIS_URL.startsWith("rediss://") ? { rejectUnauthorized: false } : undefined,
+});
 const buildQueue = new Queue("build-jobs", { connection });
 
 const WEBHOOK_SECRET = process.env.ENDGIT_WEBHOOK_SECRET || "endgit-webhook-secret";

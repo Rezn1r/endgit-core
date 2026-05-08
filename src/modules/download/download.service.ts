@@ -4,7 +4,11 @@ import path from "path";
 import IORedis from "ioredis";
 
 const REDIS_URL = process.env.REDIS_URL || "redis://localhost:6379";
-const redis = new IORedis(REDIS_URL, { maxRetriesPerRequest: null });
+const redis = new IORedis(REDIS_URL, {
+  maxRetriesPerRequest: null,
+  family: 4,
+  tls: REDIS_URL.startsWith("rediss://") ? { rejectUnauthorized: false } : undefined,
+});
 
 const storage = createStorage();
 
