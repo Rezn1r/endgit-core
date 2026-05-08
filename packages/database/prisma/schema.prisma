@@ -201,6 +201,7 @@ model Version {
 }
 
 enum VersionStatus {
+  DRAFT
   PENDING
   AUTO_PASSED
   SANDBOX_PASSED
