@@ -125,7 +125,7 @@ export class CallbackService {
     }
 
     try {
-      const webhookUrl = process.env.DISCORD_WEBHOOK_URL || "https://discord.com/api/webhooks/[REDACTED_WEBHOOK_URL]";
+      const webhookUrl = process.env.DISCORD_WEBHOOK_URL;
       if (webhookUrl) {
         const baseUrl = process.env.NEXT_PUBLIC_APP_URL || "https://endgit.dev";
         const buildLogLink = `${baseUrl}/builds/${buildId}`;
