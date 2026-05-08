@@ -55,9 +55,22 @@ export class ReviewsService {
         newPluginStatus = approvedVersionCount > 0 ? "APPROVED" : "REJECTED";
       } else newPluginStatus = "PENDING_REVIEW";
       
-      await prisma.plugin.update({ where: { id: plugin.id }, data: { status: newPluginStatus as any } });
+      await prisma.plugin.update({ 
+        where: { id: plugin.id }, 
+        data: { 
+          status: newPluginStatus as any,
+          ...(decision === "REJECTED" && { reviewBuildId: null }),
+        } 
+      });
       
-      const latestVersion = await prisma.version.findFirst({ where: { pluginId: plugin.id }, orderBy: { createdAt: 'desc' } });
+      // Find the pending version to update (not just any latest version)
+      const latestVersion = await prisma.version.findFirst({ 
+        where: { pluginId: plugin.id, status: "PENDING" }, 
+        orderBy: { createdAt: 'desc' } 
+      }) || await prisma.version.findFirst({ 
+        where: { pluginId: plugin.id }, 
+        orderBy: { createdAt: 'desc' } 
+      });
       
       if (latestVersion) {
         const newVersionStatus = decision === "APPROVED" ? "APPROVED" : decision === "REJECTED" ? "REJECTED" : "PENDING";
