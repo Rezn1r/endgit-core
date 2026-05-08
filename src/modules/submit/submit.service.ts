@@ -15,7 +15,11 @@ export class SubmitService {
       where: { pluginId: build.pluginId, status: "PENDING" }
     });
 
-    if (hasPendingVersion || build.plugin.status === "PENDING_REVIEW") {
+    if (hasPendingVersion && build.plugin.reviewBuildId !== build.id) {
+      throw new Error("A version is currently pending review. Please wait for it to be approved or rejected.");
+    }
+
+    if (build.plugin.status === "PENDING_REVIEW" && build.plugin.reviewBuildId !== build.id) {
       throw new Error("A version is currently pending review. Please wait for it to be approved or rejected.");
     }
 
@@ -28,7 +32,7 @@ export class SubmitService {
       throw new Error(`You cannot submit a build older than or equal to the latest submitted build (#${latestRelease.buildNumber}).`);
     }
 
-    const { version, displayName, description, longDescription, tags, keywords, license, iconPath, producers, changelog, supportedApis } = data;
+    const { version, displayName, description, longDescription, tags, keywords, license, iconPath, producers, changelog, supportedApis, isDraft } = data;
 
     if (!version || !displayName) throw new Error("Version and Display Name are required");
 
@@ -82,13 +86,13 @@ export class SubmitService {
 
     await prisma.$transaction(async (tx) => {
       const existingPlugin = await tx.plugin.findUnique({ where: { id: build.plugin.id } });
-      const newStatus = existingPlugin?.status === "APPROVED" ? "APPROVED" : "PENDING_REVIEW";
+      const newStatus = existingPlugin?.status === "APPROVED" ? "APPROVED" : (isDraft ? "DRAFT" : "PENDING_REVIEW");
 
       await tx.plugin.update({
         where: { id: build.plugin.id },
         data: {
           status: newStatus,
-          reviewBuildId: build.id,
+          reviewBuildId: isDraft ? null : build.id,
           displayName,
           description: description || build.plugin.name,
           longDescription: longDescription || "",
@@ -116,7 +120,7 @@ export class SubmitService {
           where: { id: existingVersion.id },
           data: {
             fileUrl: versionFileUrl, fileName: versionFileName, fileSize: versionFileSize, fileHash: build.commitHash || "",
-            status: "PENDING", changelog: changelog || data.notes || "", longDescription: longDescription || "",
+            status: isDraft ? "DRAFT" : "PENDING", changelog: changelog || data.notes || "", longDescription: longDescription || "",
             supportedApis: Array.isArray(supportedApis) ? supportedApis : [], isLatest: true, createdAt: new Date(),
             producers: { create: producers.map((p: any) => ({ githubUser: p.githubUser.trim(), role: p.role })) }
           }
@@ -125,7 +129,7 @@ export class SubmitService {
         await tx.version.create({
           data: {
             pluginId: build.plugin.id, version, fileUrl: versionFileUrl, fileName: versionFileName, fileSize: versionFileSize,
-            fileHash: build.commitHash || "", status: "PENDING", changelog: changelog || data.notes || "",
+            fileHash: build.commitHash || "", status: isDraft ? "DRAFT" : "PENDING", changelog: changelog || data.notes || "",
             longDescription: longDescription || "", supportedApis: Array.isArray(supportedApis) ? supportedApis : [], isLatest: true,
             producers: { create: producers.map((p: any) => ({ githubUser: p.githubUser.trim(), role: p.role })) }
           }
