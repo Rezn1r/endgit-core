@@ -4,7 +4,7 @@ export class SubmitService {
   async submitBuild(buildId: string, data: any, userId: string) {
     const build = await prisma.build.findUnique({
       where: { id: buildId },
-      include: { plugin: { select: { id: true, authorId: true, status: true, name: true, iconUrl: true, repoUrl: true } } }
+      include: { plugin: { select: { id: true, authorId: true, status: true, name: true, iconUrl: true, repoUrl: true, reviewBuildId: true } } }
     });
 
     if (!build) throw new Error("Build not found");
