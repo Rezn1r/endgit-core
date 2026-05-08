@@ -11,16 +11,18 @@ export class SubmitService {
     if (build.plugin.authorId !== userId) throw new Error("You can only submit your own builds");
     if (build.status !== "SUCCESS") throw new Error("Only successful builds can be submitted for review");
 
-    const hasPendingVersion = await prisma.version.findFirst({
-      where: { pluginId: build.pluginId, status: "PENDING" }
-    });
+    if (!data.isDraft) {
+      const hasPendingVersion = await prisma.version.findFirst({
+        where: { pluginId: build.pluginId, status: "PENDING" }
+      });
 
-    if (hasPendingVersion && build.plugin.reviewBuildId !== build.id) {
-      throw new Error("A version is currently pending review. Please wait for it to be approved or rejected.");
-    }
+      if (hasPendingVersion && build.plugin.reviewBuildId !== build.id) {
+        throw new Error("A version is currently pending review. Please wait for it to be approved or rejected.");
+      }
 
-    if (build.plugin.status === "PENDING_REVIEW" && build.plugin.reviewBuildId !== build.id) {
-      throw new Error("A version is currently pending review. Please wait for it to be approved or rejected.");
+      if (build.plugin.status === "PENDING_REVIEW" && build.plugin.reviewBuildId !== build.id) {
+        throw new Error("A version is currently pending review. Please wait for it to be approved or rejected.");
+      }
     }
 
     const latestRelease = await prisma.build.findFirst({

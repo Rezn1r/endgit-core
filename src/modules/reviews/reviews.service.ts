@@ -86,8 +86,19 @@ export class ReviewsService {
                   const repo = match[2].replace(/\.git$/, '').replace(/\/$/, '');
                   const token = await githubService.getAccessToken(plugin.author.id);
                   if (token) {
-                    const commentBody = `**[EndGit] Plugin Review Rejected**\n\nYour plugin submission for version \`${latestVersion.version}\` was rejected by @${reviewerUsername}.\n\n**Reason:**\n> ${comment || "Your plugin did not meet the submission requirements."}`;
-                    
+                    const pluginUrl = `https://endgit.dev/plugins/${plugin.slug}`;
+                    const commentBody = `Dear @${authorUsername},
+
+I regret to inform you that your plugin "${plugin.displayName}" (v${latestVersion.version} submitted on ${latestVersion.createdAt.toISOString()}) has been rejected.
+
+${comment || "Your plugin did not meet the submission requirements."}
+
+Please resolve these issues and submit the plugin again.
+
+View plugin: ${pluginUrl}
+
+— Reviewed by @${reviewerUsername}
+EndGit (https://endgit.dev)`;
                     await fetch(`https://api.github.com/repos/${owner}/${repo}/commits/${latestVersion.fileHash}/comments`, {
                       method: "POST",
                       headers: {
