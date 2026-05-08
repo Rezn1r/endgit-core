@@ -89,61 +89,93 @@ export class SubmitService {
     }
 
     await prisma.$transaction(async (tx) => {
-      const existingPlugin = await tx.plugin.findUnique({ where: { id: build.plugin.id } });
-      const newStatus = existingPlugin?.status === "APPROVED" ? "APPROVED" : (isDraft ? "DRAFT" : "PENDING_REVIEW");
-
-      await tx.plugin.update({
-        where: { id: build.plugin.id },
-        data: {
-          status: newStatus,
-          reviewBuildId: isDraft ? null : build.id,
-          displayName,
-          description: description || build.plugin.name,
-          longDescription: longDescription || "",
-          tags: processedTags,
-          keywords: processedKeywords,
-          license: license || "",
-          iconUrl,
+      if (isDraft) {
+        // Save as draft: cancel the pending review
+        // Delete any PENDING version for this plugin
+        const pendingVersion = await tx.version.findFirst({
+          where: { pluginId: build.pluginId, status: "PENDING" }
+        });
+        if (pendingVersion) {
+          await tx.producer.deleteMany({ where: { versionId: pendingVersion.id } });
+          await tx.version.delete({ where: { id: pendingVersion.id } });
         }
-      });
 
-      let versionFileUrl = build.artifactUrl || "";
-      let versionFileName = build.artifactUrl ? build.artifactUrl.split('/').pop()! : `build-${build.buildNumber}.zip`;
-      let versionFileSize = build.artifactSize || 0;
+        // Reset plugin review state
+        const existingPlugin = await tx.plugin.findUnique({ where: { id: build.plugin.id } });
+        const approvedVersionCount = await tx.version.count({ where: { pluginId: build.pluginId, status: "APPROVED" } });
+        const newStatus = approvedVersionCount > 0 ? "APPROVED" : "DRAFT";
 
-      const pluginFull = await tx.plugin.findUnique({ where: { id: build.plugin.id }, select: { pluginType: true } });
-      if (pluginFull?.pluginType === "CPP") {
-        versionFileUrl = JSON.stringify({ linux: build.artifactUrlLinux, win: build.artifactUrlWin });
-        versionFileName = `plugin-${version}-cpp`;
-        versionFileSize = (build.artifactSizeLinux || 0) + (build.artifactSizeWin || 0);
-      }
-
-      if (existingVersion) {
-        await tx.producer.deleteMany({ where: { versionId: existingVersion.id } });
-        await tx.version.update({
-          where: { id: existingVersion.id },
+        await tx.plugin.update({
+          where: { id: build.plugin.id },
           data: {
-            fileUrl: versionFileUrl, fileName: versionFileName, fileSize: versionFileSize, fileHash: build.commitHash || "",
-            status: isDraft ? "DRAFT" : "PENDING", changelog: changelog || data.notes || "", longDescription: longDescription || "",
-            supportedApis: Array.isArray(supportedApis) ? supportedApis : [], isLatest: true, createdAt: new Date(),
-            producers: { create: producers.map((p: any) => ({ githubUser: p.githubUser.trim(), role: p.role })) }
+            status: newStatus as any,
+            reviewBuildId: null,
           }
+        });
+
+        // Unmark the build as release
+        await tx.build.update({
+          where: { id: build.id },
+          data: { isRelease: false }
         });
       } else {
-        await tx.version.create({
+        // Normal submit for review
+        const existingPlugin = await tx.plugin.findUnique({ where: { id: build.plugin.id } });
+        const newStatus = existingPlugin?.status === "APPROVED" ? "APPROVED" : "PENDING_REVIEW";
+
+        await tx.plugin.update({
+          where: { id: build.plugin.id },
           data: {
-            pluginId: build.plugin.id, version, fileUrl: versionFileUrl, fileName: versionFileName, fileSize: versionFileSize,
-            fileHash: build.commitHash || "", status: isDraft ? "DRAFT" : "PENDING", changelog: changelog || data.notes || "",
-            longDescription: longDescription || "", supportedApis: Array.isArray(supportedApis) ? supportedApis : [], isLatest: true,
-            producers: { create: producers.map((p: any) => ({ githubUser: p.githubUser.trim(), role: p.role })) }
+            status: newStatus,
+            reviewBuildId: build.id,
+            displayName,
+            description: description || build.plugin.name,
+            longDescription: longDescription || "",
+            tags: processedTags,
+            keywords: processedKeywords,
+            license: license || "",
+            iconUrl,
           }
         });
-      }
 
-      await tx.build.update({
-        where: { id: build.id },
-        data: { isRelease: true }
-      });
+        let versionFileUrl = build.artifactUrl || "";
+        let versionFileName = build.artifactUrl ? build.artifactUrl.split('/').pop()! : `build-${build.buildNumber}.zip`;
+        let versionFileSize = build.artifactSize || 0;
+
+        const pluginFull = await tx.plugin.findUnique({ where: { id: build.plugin.id }, select: { pluginType: true } });
+        if (pluginFull?.pluginType === "CPP") {
+          versionFileUrl = JSON.stringify({ linux: build.artifactUrlLinux, win: build.artifactUrlWin });
+          versionFileName = `plugin-${version}-cpp`;
+          versionFileSize = (build.artifactSizeLinux || 0) + (build.artifactSizeWin || 0);
+        }
+
+        if (existingVersion) {
+          await tx.producer.deleteMany({ where: { versionId: existingVersion.id } });
+          await tx.version.update({
+            where: { id: existingVersion.id },
+            data: {
+              fileUrl: versionFileUrl, fileName: versionFileName, fileSize: versionFileSize, fileHash: build.commitHash || "",
+              status: "PENDING", changelog: changelog || data.notes || "", longDescription: longDescription || "",
+              supportedApis: Array.isArray(supportedApis) ? supportedApis : [], isLatest: true, createdAt: new Date(),
+              producers: { create: producers.map((p: any) => ({ githubUser: p.githubUser.trim(), role: p.role })) }
+            }
+          });
+        } else {
+          await tx.version.create({
+            data: {
+              pluginId: build.plugin.id, version, fileUrl: versionFileUrl, fileName: versionFileName, fileSize: versionFileSize,
+              fileHash: build.commitHash || "", status: "PENDING", changelog: changelog || data.notes || "",
+              longDescription: longDescription || "", supportedApis: Array.isArray(supportedApis) ? supportedApis : [], isLatest: true,
+              producers: { create: producers.map((p: any) => ({ githubUser: p.githubUser.trim(), role: p.role })) }
+            }
+          });
+        }
+
+        await tx.build.update({
+          where: { id: build.id },
+          data: { isRelease: true }
+        });
+      }
     });
 
     return { pluginId: build.plugin.id, buildId: build.id, buildNumber: build.buildNumber };
