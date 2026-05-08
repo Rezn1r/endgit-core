@@ -1,6 +1,7 @@
 import { prisma } from "@endgit/database";
 import { sendPluginApprovedWebhook } from "../../utils/discord";
 import { sendRejectionEmail, sendApprovalEmail } from "../../utils/mailer";
+import { githubService } from "../github/github.service";
 
 export class ReviewsService {
   async getAutoChecks(slug: string) {
@@ -76,6 +77,34 @@ export class ReviewsService {
 
         if (authorEmail) {
           if (decision === "REJECTED") {
+            // Post comment to GitHub commit
+            if (plugin.repoUrl && latestVersion.fileHash) {
+              try {
+                const match = plugin.repoUrl.match(/github\.com\/([^\/]+)\/([^\/]+)/);
+                if (match && plugin.author?.id) {
+                  const owner = match[1];
+                  const repo = match[2].replace(/\.git$/, '').replace(/\/$/, '');
+                  const token = await githubService.getAccessToken(plugin.author.id);
+                  if (token) {
+                    const commentBody = `**[EndGit] Plugin Review Rejected**\n\nYour plugin submission for version \`${latestVersion.version}\` was rejected by @${reviewerUsername}.\n\n**Reason:**\n> ${comment || "Your plugin did not meet the submission requirements."}`;
+                    
+                    await fetch(`https://api.github.com/repos/${owner}/${repo}/commits/${latestVersion.fileHash}/comments`, {
+                      method: "POST",
+                      headers: {
+                        Authorization: `Bearer ${token}`,
+                        Accept: "application/vnd.github.v3+json",
+                        "User-Agent": "EndGit-CI",
+                        "Content-Type": "application/json"
+                      },
+                      body: JSON.stringify({ body: commentBody })
+                    });
+                  }
+                }
+              } catch (e) {
+                console.error("[GitHub] Failed to post commit comment for rejection:", e);
+              }
+            }
+
             await sendRejectionEmail({
               to: authorEmail, authorUsername, pluginName: plugin.displayName,
               pluginSlug: plugin.slug, version: latestVersion.version,
