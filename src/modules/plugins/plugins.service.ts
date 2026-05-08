@@ -207,6 +207,9 @@ export class PluginsService {
 
     // Check displayName uniqueness if changing
     if (displayName && displayName !== plugin.displayName) {
+      if (plugin.status === "APPROVED" && user.trustLevel !== "ADMIN") {
+        throw new Error("Cannot change display name of an approved plugin");
+      }
       const existing = await prisma.plugin.findFirst({
         where: { displayName, id: { not: plugin.id } }
       });
