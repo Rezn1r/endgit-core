@@ -75,19 +75,19 @@ export class ReviewsService {
         const authorEmail = plugin.author?.email;
         const authorUsername = plugin.author?.username || "Developer";
 
-        if (authorEmail) {
-          if (decision === "REJECTED") {
-            // Post comment to GitHub commit
-            if (plugin.repoUrl && latestVersion.fileHash) {
-              try {
-                const match = plugin.repoUrl.match(/github\.com\/([^\/]+)\/([^\/]+)/);
-                if (match && plugin.author?.id) {
-                  const owner = match[1];
-                  const repo = match[2].replace(/\.git$/, '').replace(/\/$/, '');
-                  const token = await githubService.getAccessToken(plugin.author.id);
-                  if (token) {
-                    const pluginUrl = `https://endgit.dev/plugins/${plugin.slug}`;
-                    const commentBody = `Dear @${authorUsername},
+        // Post comment to GitHub commit (independent of email)
+        if (decision === "REJECTED" && plugin.repoUrl && latestVersion.fileHash) {
+          try {
+            const match = plugin.repoUrl.match(/github\.com\/([^\/]+)\/([^\/]+)/);
+            if (match) {
+              const owner = match[1];
+              const repo = match[2].replace(/\.git$/, '').replace(/\/$/, '');
+              // Use reviewer's token (admin has write access)
+              const token = await githubService.getAccessToken(reviewerId);
+              console.log(`[GitHub] Attempting commit comment: owner=${owner}, repo=${repo}, commit=${latestVersion.fileHash}, hasToken=${!!token}`);
+              if (token) {
+                const pluginUrl = `https://endgit.dev/plugins/${plugin.slug}`;
+                const commentBody = `Dear @${authorUsername},
 
 I regret to inform you that your plugin "${plugin.displayName}" (v${latestVersion.version} submitted on ${latestVersion.createdAt.toISOString()}) has been rejected.
 
@@ -99,23 +99,31 @@ View plugin: ${pluginUrl}
 
 — Reviewed by @${reviewerUsername}
 EndGit (https://endgit.dev)`;
-                    await fetch(`https://api.github.com/repos/${owner}/${repo}/commits/${latestVersion.fileHash}/comments`, {
-                      method: "POST",
-                      headers: {
-                        Authorization: `Bearer ${token}`,
-                        Accept: "application/vnd.github.v3+json",
-                        "User-Agent": "EndGit-CI",
-                        "Content-Type": "application/json"
-                      },
-                      body: JSON.stringify({ body: commentBody })
-                    });
-                  }
+                const ghRes = await fetch(`https://api.github.com/repos/${owner}/${repo}/commits/${latestVersion.fileHash}/comments`, {
+                  method: "POST",
+                  headers: {
+                    Authorization: `Bearer ${token}`,
+                    Accept: "application/vnd.github.v3+json",
+                    "User-Agent": "EndGit-CI",
+                    "Content-Type": "application/json"
+                  },
+                  body: JSON.stringify({ body: commentBody })
+                });
+                if (!ghRes.ok) {
+                  const errBody = await ghRes.text();
+                  console.error(`[GitHub] Commit comment failed (${ghRes.status}):`, errBody);
+                } else {
+                  console.log(`[GitHub] ✅ Commit comment posted on ${owner}/${repo}@${latestVersion.fileHash}`);
                 }
-              } catch (e) {
-                console.error("[GitHub] Failed to post commit comment for rejection:", e);
               }
             }
+          } catch (e) {
+            console.error("[GitHub] Failed to post commit comment for rejection:", e);
+          }
+        }
 
+        if (authorEmail) {
+          if (decision === "REJECTED") {
             await sendRejectionEmail({
               to: authorEmail, authorUsername, pluginName: plugin.displayName,
               pluginSlug: plugin.slug, version: latestVersion.version,
