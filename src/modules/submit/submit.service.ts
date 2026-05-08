@@ -25,13 +25,15 @@ export class SubmitService {
       }
     }
 
-    const latestRelease = await prisma.build.findFirst({
-      where: { pluginId: build.pluginId, isRelease: true },
-      orderBy: { buildNumber: "desc" }
-    });
+    if (!data.isDraft) {
+      const latestRelease = await prisma.build.findFirst({
+        where: { pluginId: build.pluginId, isRelease: true },
+        orderBy: { buildNumber: "desc" }
+      });
 
-    if (latestRelease && build.buildNumber <= latestRelease.buildNumber) {
-      throw new Error(`You cannot submit a build older than or equal to the latest submitted build (#${latestRelease.buildNumber}).`);
+      if (latestRelease && build.id !== latestRelease.id && build.buildNumber <= latestRelease.buildNumber) {
+        throw new Error(`You cannot submit a build older than or equal to the latest submitted build (#${latestRelease.buildNumber}).`);
+      }
     }
 
     const { version, displayName, description, longDescription, tags, keywords, license, iconPath, producers, changelog, supportedApis, isDraft } = data;
