@@ -74,7 +74,13 @@ export class DownloadService {
       ]);
     }
 
-    let finalFileName = decodeURIComponent(path.basename(version.fileName));
+    // Extract correct filename from the storage key (most reliable source)
+    let finalFileName = path.basename(decodeURIComponent(storageKey));
+    
+    // Fallback: if storageKey doesn't give a good name, try version.fileName
+    if (!finalFileName || !finalFileName.includes('.')) {
+      finalFileName = decodeURIComponent(path.basename(version.fileName));
+    }
     
     if (finalFileName.startsWith("plugin-")) {
       finalFileName = finalFileName.replace("plugin-", `${plugin.slug}-`);
