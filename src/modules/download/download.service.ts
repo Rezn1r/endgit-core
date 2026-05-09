@@ -18,7 +18,7 @@ export class DownloadService {
     if (!exists) throw new Error("File not found");
 
     const file = await storage.download(key);
-    const fileName = path.basename(key);
+    const fileName = path.basename(decodeURIComponent(key));
 
     return { file, fileName };
   }

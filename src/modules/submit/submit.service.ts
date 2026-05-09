@@ -139,7 +139,7 @@ export class SubmitService {
         });
 
         let versionFileUrl = build.artifactUrl || "";
-        let versionFileName = build.artifactUrl ? build.artifactUrl.split('/').pop()! : `build-${build.buildNumber}.zip`;
+        let versionFileName = build.artifactUrl ? decodeURIComponent(build.artifactUrl).split('/').pop()! : `build-${build.buildNumber}.zip`;
         let versionFileSize = build.artifactSize || 0;
 
         const pluginFull = await tx.plugin.findUnique({ where: { id: build.plugin.id }, select: { pluginType: true } });
