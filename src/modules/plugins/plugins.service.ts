@@ -135,6 +135,20 @@ export class PluginsService {
     return plugins.map((p: any) => ({ ...p, latestVersion: p.versions[0]?.version || null, versions: undefined }));
   }
 
+  async getGlobalStats() {
+    const [plugins, downloadsAggregate, builds] = await Promise.all([
+      prisma.plugin.count({ where: { status: "APPROVED" } }),
+      prisma.plugin.aggregate({ _sum: { downloads: true } }),
+      prisma.build.count(),
+    ]);
+
+    return {
+      plugins,
+      downloads: downloadsAggregate._sum.downloads || 0,
+      builds,
+    };
+  }
+
   async getBySlug(slug: string, user?: any) {
     const plugin = await prisma.plugin.findUnique({
       where: { slug },

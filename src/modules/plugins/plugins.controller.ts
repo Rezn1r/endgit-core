@@ -49,6 +49,15 @@ export class PluginsController {
     }
   }
 
+  async getGlobalStats(_req: Request, res: Response) {
+    try {
+      const data = await pluginsService.getGlobalStats();
+      res.json({ success: true, data });
+    } catch (error: any) {
+      res.status(500).json({ success: false, error: "Failed to get global stats" });
+    }
+  }
+
   async getBySlug(req: Request, res: Response) {
     try {
       const user = (req as AuthRequest).user;
