@@ -110,19 +110,7 @@ export class CallbackService {
       data: { status: finalStatus, duration, finishedAt: new Date() }
     });
 
-    if (build.safeScore !== null) {
-      const recentBuilds = await prisma.build.findMany({
-        where: { pluginId: build.pluginId, safeScore: { not: null } },
-        orderBy: { createdAt: "desc" },
-        take: 5,
-        select: { safeScore: true }
-      });
-
-      if (recentBuilds.length > 0) {
-        const avgScore = Math.round(recentBuilds.reduce((sum, b) => sum + (b.safeScore || 0), 0) / recentBuilds.length);
-        await prisma.plugin.update({ where: { id: build.pluginId }, data: { trustScore: avgScore } });
-      }
-    }
+    // trustScore is now only updated upon submission of a specific build
 
     try {
       const webhookUrl = process.env.DISCORD_WEBHOOK_URL;
