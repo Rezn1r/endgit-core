@@ -7,7 +7,7 @@ export async function sendPluginApprovedWebhook(plugin: any, version: any, revie
     ? version.producers.map((p: any) => `${p.role}: ${p.githubUser}`).join("\n")
     : `Author: ${plugin.author?.username || "Unknown"}`;
 
-  const pluginUrl = `https://endgit.dev/plugins/${plugin.slug}`;
+  const pluginUrl = `https://endgit.dev/plugins/${plugin.slug}?v=${version.version}`;
 
   const embed = {
     title: `${plugin.displayName} v${version.version}`,
