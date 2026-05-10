@@ -158,7 +158,7 @@ export class PluginsService {
           orderBy: { createdAt: "desc" },
           select: {
             id: true, version: true, changelog: true, longDescription: true, fileName: true, fileSize: true,
-            downloads: true, isLatest: true, status: true, createdAt: true, supportedApis: true,
+            downloads: true, isLatest: true, status: true, createdAt: true, supportedApis: true, fileHash: true,
             producers: { select: { githubUser: true, role: true } }
           },
         },
