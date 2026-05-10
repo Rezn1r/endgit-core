@@ -229,6 +229,22 @@ export class GithubService {
     }
 
     if (!existing) {
+      let latestCommitHash = null;
+      let latestCommitMessage = "Initial build triggered by enabling CI";
+
+      try {
+        const commitRes = await fetch(`https://api.github.com/repos/${owner}/${repo}/commits/${defaultBranch || 'main'}`, {
+          headers: { Authorization: `Bearer ${accessToken}`, Accept: "application/vnd.github.v3+json", "User-Agent": "EndGit-CI" }
+        });
+        if (commitRes.ok) {
+          const commitData = await commitRes.json() as any;
+          if (commitData.sha) latestCommitHash = commitData.sha;
+          if (commitData.commit && commitData.commit.message) latestCommitMessage = commitData.commit.message;
+        }
+      } catch (e) {
+        console.warn(`Failed to fetch latest commit for ${fullName}:`, e);
+      }
+
       const buildNumber = await prisma.build.count({ where: { pluginId: plugin.id } }) + 1;
       const build = await prisma.build.create({
         data: {
@@ -236,7 +252,8 @@ export class GithubService {
           pluginId: plugin.id,
           status: "QUEUED",
           branch: defaultBranch || "main",
-          commitMessage: "Initial build triggered by enabling CI",
+          commitHash: latestCommitHash,
+          commitMessage: latestCommitMessage,
           triggerType: "MANUAL",
         }
       });
@@ -248,7 +265,8 @@ export class GithubService {
         buildId: build.id,
         userId: plugin.authorId,
         branch: defaultBranch || "main",
-        commitMessage: "Initial build triggered by enabling CI",
+        commitHash: latestCommitHash,
+        commitMessage: latestCommitMessage,
       });
     }
 
