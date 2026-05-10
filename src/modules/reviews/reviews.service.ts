@@ -74,6 +74,11 @@ export class ReviewsService {
 
       if (latestVersion) {
         const newVersionStatus = decision === "APPROVED" ? "APPROVED" : decision === "REJECTED" ? "REJECTED" : "PENDING";
+        
+        if (latestVersion.status === newVersionStatus) {
+          throw new Error(`This version is already marked as ${newVersionStatus}`);
+        }
+
         await prisma.version.update({ where: { id: latestVersion.id }, data: { status: newVersionStatus } });
 
         if (newVersionStatus === "APPROVED") {

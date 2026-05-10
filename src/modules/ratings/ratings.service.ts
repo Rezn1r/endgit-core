@@ -46,6 +46,10 @@ export class RatingsService {
 
     if (!score || score < 1 || score > 5) throw new Error("Score must be between 1 and 5");
 
+    const existingRating = await prisma.rating.findUnique({
+      where: { userId_pluginId: { userId, pluginId: plugin.id } }
+    });
+
     const rating = await prisma.rating.upsert({
       where: { userId_pluginId: { userId, pluginId: plugin.id } },
       create: { score, comment: comment || null, userId, pluginId: plugin.id },
@@ -64,7 +68,8 @@ export class RatingsService {
       data: { stars: Math.round((avgResult._avg.score || 0) * 20) }
     });
 
-    if (rating.user?.username) {
+    // Only send webhook if it's a new rating, not an update
+    if (!existingRating && rating.user?.username) {
       await sendNewRatingWebhook(plugin, rating, rating.user.username);
     }
 
