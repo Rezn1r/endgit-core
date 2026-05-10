@@ -179,6 +179,13 @@ export class SubmitService {
       }
     });
 
+    if (!data.isDraft && build.plugin) {
+      const authorUsername = build.plugin.author?.username || "Unknown";
+      import("../../utils/discord").then(m => {
+        m.sendPluginSubmittedWebhook(build.plugin, version, authorUsername).catch(e => console.error(e));
+      });
+    }
+
     return { pluginId: build.plugin.id, buildId: build.id, buildNumber: build.buildNumber };
   }
 

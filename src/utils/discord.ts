@@ -72,3 +72,35 @@ export async function sendNewRatingWebhook(plugin: any, rating: any, reviewerNam
     console.error("Failed to send new rating webhook:", error);
   }
 }
+
+export async function sendPluginSubmittedWebhook(plugin: any, version: string, authorUsername: string) {
+  const webhookUrl = process.env.DISCORD_WEBHOOK_SUBMITTED_PLUGIN || process.env.DISCORD_WEBHOOK_APPROVED_PLUGIN;
+  if (!webhookUrl) return;
+
+  const pluginUrl = `https://endgit.dev/plugins/${plugin.slug}?v=${version}`;
+
+  const embed = {
+    title: `New Plugin Submission: ${plugin.displayName} v${version}`,
+    url: pluginUrl,
+    description: plugin.description || `A new version has been submitted for review!`,
+    color: 0xf1c40f, // Yellow
+    fields: [
+      { name: "Author", value: `@${authorUsername}`, inline: false },
+      { name: "Link", value: `[View on EndGit](${pluginUrl})`, inline: false }
+    ],
+    timestamp: new Date().toISOString()
+  };
+
+  try {
+    await fetch(webhookUrl, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        username: "Plugin Updates",
+        embeds: [embed]
+      })
+    });
+  } catch (error) {
+    console.error("Failed to send plugin submitted webhook:", error);
+  }
+}
