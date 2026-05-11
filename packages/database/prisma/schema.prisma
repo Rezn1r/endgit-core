@@ -105,6 +105,7 @@ model Plugin {
   downloads       Int          @default(0)
   stars           Int          @default(0)
   status          PluginStatus @default(DRAFT)
+  statusReason    String?      @db.Text
   // Scoring
   stabilityScore  Float        @default(0)
   trustScore      Float        @default(0)
@@ -123,8 +124,9 @@ model Plugin {
   builds     Build[]
   autoChecks AutoCheck[]
   reviews    Review[]
-  reports    Report[]
-  ratings    Rating[]
+  reports        Report[]
+  ratings        Rating[]
+  moderationLogs ModerationLog[]
   analytics  PluginAnalytics[]
 
   @@index([authorId])
@@ -188,6 +190,7 @@ model Version {
   downloads     Int           @default(0)
   isLatest      Boolean       @default(false)
   status        VersionStatus @default(PENDING)
+  statusReason  String?       @db.Text // Reason for REJECTED status
   createdAt     DateTime      @default(now())
 
   pluginId     String
@@ -390,4 +393,26 @@ model Rating {
   @@unique([userId, pluginId])
   @@index([pluginId])
   @@map("ratings")
+}
+
+// ── Moderation Audit Log ──────────────────────────────────
+
+model ModerationLog {
+  id          String   @id @default(cuid())
+  action      String   // e.g. "PLUGIN_STATUS_CHANGE", "VERSION_STATUS_CHANGE"
+  targetType  String   // "PLUGIN" or "VERSION"
+  targetId    String   // ID of the plugin or version
+  oldStatus   String   // Previous status value
+  newStatus   String   // New status value
+  reason      String?  @db.Text // Admin-provided reason
+  actorId     String   // Admin user who performed the action
+  createdAt   DateTime @default(now())
+
+  pluginId String?
+  plugin   Plugin? @relation(fields: [pluginId], references: [id], onDelete: SetNull)
+
+  @@index([pluginId])
+  @@index([actorId])
+  @@index([createdAt])
+  @@map("moderation_logs")
 }

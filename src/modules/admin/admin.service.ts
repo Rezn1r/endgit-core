@@ -1,4 +1,7 @@
 import { prisma } from "@endgit/database";
+import { sendRejectionEmail } from "../../utils/mailer";
+
+const NEGATIVE_STATUSES = ["REJECTED", "SUSPENDED", "FLAGGED"];
 
 export class AdminService {
   async getUsers(page: number, limit: number, search?: string) {
@@ -97,28 +100,141 @@ export class AdminService {
     return { plugins, total, totalPages: Math.ceil(total / limit) };
   }
 
-  async updatePluginStatus(pluginId: string, status: string) {
+  async updatePluginStatus(pluginId: string, status: string, reason?: string, adminUser?: any) {
     if (!["DRAFT", "PENDING_REVIEW", "APPROVED", "REJECTED", "SUSPENDED", "FLAGGED"].includes(status)) {
       throw new Error("Invalid plugin status");
     }
 
-    return await prisma.plugin.update({
+    const plugin = await prisma.plugin.findUnique({
       where: { id: pluginId },
-      data: { status: status as any },
-      select: { id: true, slug: true, status: true, displayName: true }
+      include: {
+        author: { select: { id: true, username: true, email: true } },
+        versions: { where: { status: "APPROVED" }, orderBy: { createdAt: "desc" }, take: 1 },
+      },
     });
+
+    if (!plugin) throw new Error("Plugin not found");
+
+    const oldStatus = plugin.status;
+    const isNegative = NEGATIVE_STATUSES.includes(status);
+
+    // Persist the status change + reason
+    const updated = await prisma.plugin.update({
+      where: { id: pluginId },
+      data: {
+        status: status as any,
+        statusReason: isNegative ? (reason || null) : null,
+        // Clear reviewBuildId on rejection just like the review pipeline does
+        ...(status === "REJECTED" && { reviewBuildId: null }),
+      },
+      select: { id: true, slug: true, status: true, statusReason: true, displayName: true },
+    });
+
+    // When transitioning from APPROVED to a negative status, clear isLatest flags
+    // so the plugin fully disappears from public version listings
+    if (oldStatus === "APPROVED" && isNegative) {
+      await prisma.version.updateMany({
+        where: { pluginId, isLatest: true },
+        data: { isLatest: false },
+      });
+    }
+
+    // Create audit log entry
+    if (adminUser) {
+      await prisma.moderationLog.create({
+        data: {
+          action: "PLUGIN_STATUS_CHANGE",
+          targetType: "PLUGIN",
+          targetId: pluginId,
+          oldStatus,
+          newStatus: status,
+          reason: isNegative ? (reason || null) : null,
+          actorId: adminUser.id,
+          pluginId,
+        },
+      });
+    }
+
+    // Send notification email to the plugin author for negative status changes
+    if (isNegative && plugin.author?.email) {
+      const latestVersion = plugin.versions[0];
+      sendRejectionEmail({
+        to: plugin.author.email,
+        authorUsername: plugin.author.username || "Developer",
+        pluginName: plugin.displayName,
+        pluginSlug: plugin.slug,
+        version: latestVersion?.version || "N/A",
+        submittedAt: latestVersion?.createdAt?.toISOString() || new Date().toISOString(),
+        reviewerUsername: adminUser?.username || "Admin",
+        reason: reason || `Your plugin has been ${status.toLowerCase()} by an administrator.`,
+      }).catch((err: any) => console.error("[Admin] Failed to send status change email:", err));
+    }
+
+    return updated;
   }
 
-  async updateVersionStatus(versionId: string, status: string) {
+  async updateVersionStatus(versionId: string, status: string, reason?: string, adminUser?: any) {
     if (!["PENDING", "APPROVED", "REJECTED"].includes(status)) {
       throw new Error("Invalid version status");
     }
 
-    return await prisma.version.update({
+    const version = await prisma.version.findUnique({
       where: { id: versionId },
-      data: { status: status as any },
-      select: { id: true, version: true, status: true }
+      include: {
+        plugin: {
+          include: { author: { select: { id: true, username: true, email: true } } },
+        },
+      },
     });
+
+    if (!version) throw new Error("Version not found");
+
+    const oldStatus = version.status;
+    const isNegative = status === "REJECTED";
+
+    // Persist the status change + reason
+    const updated = await prisma.version.update({
+      where: { id: versionId },
+      data: {
+        status: status as any,
+        statusReason: isNegative ? (reason || null) : null,
+        // Clear isLatest if rejecting an approved version
+        ...(oldStatus === "APPROVED" && isNegative && { isLatest: false }),
+      },
+      select: { id: true, version: true, status: true, statusReason: true },
+    });
+
+    // Create audit log entry
+    if (adminUser) {
+      await prisma.moderationLog.create({
+        data: {
+          action: "VERSION_STATUS_CHANGE",
+          targetType: "VERSION",
+          targetId: versionId,
+          oldStatus,
+          newStatus: status,
+          reason: isNegative ? (reason || null) : null,
+          actorId: adminUser.id,
+          pluginId: version.pluginId,
+        },
+      });
+    }
+
+    // Send notification email when rejecting a version
+    if (isNegative && version.plugin?.author?.email) {
+      sendRejectionEmail({
+        to: version.plugin.author.email,
+        authorUsername: version.plugin.author.username || "Developer",
+        pluginName: version.plugin.displayName,
+        pluginSlug: version.plugin.slug,
+        version: version.version,
+        submittedAt: version.createdAt.toISOString(),
+        reviewerUsername: adminUser?.username || "Admin",
+        reason: reason || "This version has been rejected by an administrator.",
+      }).catch((err: any) => console.error("[Admin] Failed to send version rejection email:", err));
+    }
+
+    return updated;
   }
 
   async toggleFeatured(pluginId: string) {
