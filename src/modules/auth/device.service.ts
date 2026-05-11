@@ -2,6 +2,7 @@ import IORedis from "ioredis";
 import { randomBytes } from "crypto";
 import { prisma } from "@endgit/database";
 import { generateToken } from "../../middleware/auth";
+import { refreshService } from "./refresh.service";
 
 const REDIS_URL = process.env.REDIS_URL || "redis://localhost:6379";
 const redis = new IORedis(REDIS_URL, {
@@ -143,8 +144,15 @@ export class DeviceService {
             trustLevel: user.trustLevel,
         });
 
+        const refreshToken = await refreshService.createRefreshToken(
+            user.id,
+            user.username,
+            user.trustLevel,
+        );
+
         return {
             access_token: token,
+            refresh_token: refreshToken,
             token_type: "bearer",
             username: user.username,
         };
