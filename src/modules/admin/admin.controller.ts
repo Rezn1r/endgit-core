@@ -59,7 +59,9 @@ export class AdminController {
 
   async updatePluginStatus(req: AuthRequest, res: Response) {
     try {
-      const data = await adminService.updatePluginStatus(String(req.params.id), req.body.status);
+      const data = await adminService.updatePluginStatus(
+        String(req.params.id), req.body.status, req.body.reason, req.user
+      );
       res.json({ success: true, data });
     } catch (error: any) {
       res.status(error.message.includes("Invalid") ? 400 : 500).json({ success: false, error: error.message || "Failed to update plugin status" });
@@ -68,7 +70,9 @@ export class AdminController {
 
   async updateVersionStatus(req: AuthRequest, res: Response) {
     try {
-      const data = await adminService.updateVersionStatus(String(req.params.id), req.body.status);
+      const data = await adminService.updateVersionStatus(
+        String(req.params.id), req.body.status, req.body.reason, req.user
+      );
       res.json({ success: true, data });
     } catch (error: any) {
       res.status(error.message.includes("Invalid") ? 400 : 500).json({ success: false, error: error.message || "Failed to update version status" });
