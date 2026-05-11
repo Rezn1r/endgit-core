@@ -221,7 +221,7 @@ export async function sendPluginReportWebhook(plugin: any, reporterUsername: str
   ].join("\n");
 
   const embed: DiscordEmbed = {
-    title: `⚠️ Plugin Reported: ${plugin.displayName}`,
+    title: `Plugin Reported: ${plugin.displayName}`,
     url: pluginUrl,
     description,
     color: CONFIG.COLORS.DANGER,
