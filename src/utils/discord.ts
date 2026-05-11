@@ -1,106 +1,239 @@
+/**
+ * EndGit Discord Webhook Utilities
+ * Provides rich notifications for marketplace events.
+ */
+
+const CONFIG = {
+  BASE_URL: "https://endgit.dev",
+  LOGO_URL: "https://endgit.dev/logo.png",
+  COLORS: {
+    INFO: 0x38BDF8,      // Cyan (Approved)
+    SUCCESS: 0x2ECC71,   // Green (Submitted)
+    WARNING: 0xFFDB58,   // Yellow (Rating)
+    DANGER: 0xEF4444,    // Red (Rejected/Flagged)
+    NEUTRAL: 0x94A3B8,   // Slate
+  }
+};
+
+type DiscordEmbed = {
+  title?: string;
+  url?: string;
+  description?: string;
+  color?: number;
+  timestamp?: string;
+  thumbnail?: { url: string };
+  footer?: { text: string; icon_url?: string };
+};
+
+type DiscordWebhookBody = {
+  username?: string;
+  avatar_url?: string;
+  embeds?: DiscordEmbed[];
+};
+
+/**
+ * Generic helper to send a Discord webhook with consistent styling and error handling.
+ */
+async function sendWebhook(url: string, body: DiscordWebhookBody) {
+  try {
+    const response = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        username: body.username || "EndGit Marketplace",
+        avatar_url: body.avatar_url || CONFIG.LOGO_URL,
+        ...body,
+      }),
+    });
+
+    if (!response.ok) {
+      const text = await response.text();
+      console.error(`Discord webhook failed (${response.status}): ${text}`);
+    }
+  } catch (error) {
+    console.error("Failed to send Discord webhook:", error);
+  }
+}
+
+/**
+ * Formats a numeric score into a visual star representation.
+ */
+function formatStars(score: number): string {
+  const fullStar = "⭐";
+  const emptyStar = "☆";
+  const clampedScore = Math.max(0, Math.min(5, Math.floor(score)));
+  return fullStar.repeat(clampedScore) + emptyStar.repeat(5 - clampedScore);
+}
+
+/**
+ * Notification for when a plugin version is approved and released.
+ */
 export async function sendPluginApprovedWebhook(plugin: any, version: any, reviewerUsername: string) {
   const webhookUrl = process.env.DISCORD_WEBHOOK_APPROVED_PLUGIN;
   if (!webhookUrl) return;
 
-  const category = plugin.tags && plugin.tags.length > 0 ? plugin.tags[0] : "General";
-  const authorStr = version.producers && version.producers.length > 0 
-    ? version.producers.map((p: any) => `${p.role}: ${p.githubUser}`).join("\n")
-    : `Author: ${plugin.author?.username || "Unknown"}`;
+  const category = plugin.tags?.[0] || "General";
+  const pluginUrl = `${CONFIG.BASE_URL}/plugins/${plugin.slug}?v=${version.version}`;
 
-  const pluginUrl = `https://endgit.dev/plugins/${plugin.slug}?v=${version.version}`;
+  // Format author list from producers or default to the plugin author
+  const authorStr = version.producers?.length > 0
+    ? version.producers.map((p: any) => p.githubUser).join(", ")
+    : plugin.author?.username || "Unknown";
 
-  const embed = {
+  const description = [
+    `**Category**: ${category}`,
+    `**Author**: ${authorStr}`,
+    `**Reviewer**: @${reviewerUsername}`,
+    "",
+    plugin.description || "A plugin for Endstone",
+    "",
+    `**Release Notes**: ${version.changelog || "No notes provided."}`
+  ].join("\n");
+
+  const embed: DiscordEmbed = {
     title: `${plugin.displayName} v${version.version}`,
     url: pluginUrl,
-    description: plugin.description || `Plugin for Endstone`,
-    color: 0x2ecc71, // Green
-    fields: [
-      { name: "Category", value: category, inline: false },
-      { name: "Author", value: authorStr, inline: false },
-      { name: "State", value: `Approved by @${reviewerUsername}`, inline: false },
-      { name: "Link", value: `[View on EndGit](${pluginUrl})`, inline: false }
-    ],
-    timestamp: new Date().toISOString()
+    description,
+    color: CONFIG.COLORS.INFO,
+    timestamp: new Date().toISOString(),
+    thumbnail: plugin.iconUrl ? { url: plugin.iconUrl } : undefined,
+    footer: { text: "EndGit Release Pipeline", icon_url: CONFIG.LOGO_URL }
   };
 
-  if (plugin.iconUrl) {
-    (embed as any).image = { url: plugin.iconUrl };
-  }
-
-  try {
-    await fetch(webhookUrl, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        username: "Plugin Updates",
-        embeds: [embed]
-      })
-    });
-  } catch (error) {
-    console.error("Failed to send plugin approved webhook:", error);
-  }
+  await sendWebhook(webhookUrl, {
+    username: "Plugin Updates",
+    embeds: [embed]
+  });
 }
 
+/**
+ * Notification for new user reviews and ratings.
+ */
 export async function sendNewRatingWebhook(plugin: any, rating: any, reviewerName: string) {
   const webhookUrl = process.env.DISCORD_WEBHOOK_NEW_RATING;
   if (!webhookUrl) return;
 
-  const pluginUrl = `https://endgit.dev/plugins/${plugin.slug}`;
-  
-  const embed = {
-    title: `New Review on ${plugin.displayName || plugin.name}`,
+  const pluginUrl = `${CONFIG.BASE_URL}/plugins/${plugin.slug}`;
+  const stars = formatStars(rating.score);
+
+  const description = [
+    `**Rating**: ${stars} (${rating.score}/5)`,
+    `**User**: ${reviewerName}`,
+    "",
+    rating.comment ? `"${rating.comment}"` : "*No comment provided.*"
+  ].join("\n");
+
+  const embed: DiscordEmbed = {
+    title: `New Review: ${plugin.displayName || plugin.name}`,
     url: pluginUrl,
-    description: `Made by ${reviewerName}!`,
-    color: 0x3498db, // Blue
-    fields: [
-      { name: "Score:", value: `${rating.score}/5`, inline: false },
-      { name: "Message:", value: rating.comment || "No comment provided.", inline: false }
-    ],
-    timestamp: new Date().toISOString()
+    description,
+    color: CONFIG.COLORS.WARNING,
+    timestamp: new Date().toISOString(),
+    thumbnail: plugin.iconUrl ? { url: plugin.iconUrl } : undefined,
+    footer: { text: "EndGit User Feedback", icon_url: CONFIG.LOGO_URL }
   };
 
-  try {
-    await fetch(webhookUrl, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        username: "User reviews",
-        embeds: [embed]
-      })
-    });
-  } catch (error) {
-    console.error("Failed to send new rating webhook:", error);
-  }
+  await sendWebhook(webhookUrl, {
+    username: "User Reviews",
+    embeds: [embed]
+  });
 }
 
+/**
+ * Notification for new plugin/version submissions pending review.
+ */
 export async function sendPluginSubmittedWebhook(plugin: any, version: string, authorUsername: string) {
   const webhookUrl = process.env.DISCORD_WEBHOOK_SUBMITTED_PLUGIN || process.env.DISCORD_WEBHOOK_APPROVED_PLUGIN;
   if (!webhookUrl) return;
 
-  const pluginUrl = `https://endgit.dev/plugins/${plugin.slug}?v=${version}`;
+  const pluginUrl = `${CONFIG.BASE_URL}/plugins/${plugin.slug}?v=${version}`;
 
-  const embed = {
-    title: `New Plugin Submission: ${plugin.displayName} v${version}`,
+  const description = [
+    `**Version**: ${version}`,
+    `**Author**: ${authorUsername}`,
+    `**Status**: ⏳ Pending Review`,
+    "",
+    plugin.description || `A new version has been submitted for review.`
+  ].join("\n");
+
+  const embed: DiscordEmbed = {
+    title: `Submission: ${plugin.displayName}`,
     url: pluginUrl,
-    description: plugin.description || `A new version has been submitted for review!`,
-    color: 0xf1c40f, // Yellow
-    fields: [
-      { name: "Author", value: `@${authorUsername}`, inline: false },
-      { name: "Link", value: `[View on EndGit](${pluginUrl})`, inline: false }
-    ],
-    timestamp: new Date().toISOString()
+    description,
+    color: CONFIG.COLORS.SUCCESS,
+    timestamp: new Date().toISOString(),
+    thumbnail: plugin.iconUrl ? { url: plugin.iconUrl } : undefined,
+    footer: { text: "EndGit Moderation Queue", icon_url: CONFIG.LOGO_URL }
   };
 
-  try {
-    await fetch(webhookUrl, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        username: "Plugin Updates",
-        embeds: [embed]
-      })
-    });
-  } catch (error) {
-    console.error("Failed to send plugin submitted webhook:", error);
-  }
+  await sendWebhook(webhookUrl, {
+    username: "Plugin Updates",
+    embeds: [embed]
+  });
 }
+
+/**
+ * Notification for when a plugin or version is rejected or flagged.
+ */
+export async function sendPluginModerationWebhook(plugin: any, status: string, reason: string | null, adminUsername: string) {
+  const webhookUrl = process.env.DISCORD_WEBHOOK_MODERATION || process.env.DISCORD_WEBHOOK_APPROVED_PLUGIN;
+  if (!webhookUrl) return;
+
+  const pluginUrl = `${CONFIG.BASE_URL}/plugins/${plugin.slug}`;
+  const color = status === "APPROVED" ? CONFIG.COLORS.SUCCESS : CONFIG.COLORS.DANGER;
+
+  const description = [
+    `**New Status**: **${status}**`,
+    `**Action By**: @${adminUsername}`,
+    "",
+    `**Reason**: ${reason || "No reason specified."}`
+  ].join("\n");
+
+  const embed: DiscordEmbed = {
+    title: `Moderation: ${plugin.displayName}`,
+    url: pluginUrl,
+    description,
+    color: color,
+    timestamp: new Date().toISOString(),
+    footer: { text: "EndGit Security & Safety", icon_url: CONFIG.LOGO_URL }
+  };
+
+  await sendWebhook(webhookUrl, {
+    username: "Moderation Logs",
+    embeds: [embed]
+  });
+}
+
+/**
+ * Notification for when a plugin is reported by a user.
+ */
+export async function sendPluginReportWebhook(plugin: any, reporterUsername: string, reason: string, details?: string) {
+  const webhookUrl = process.env.DISCORD_WEBHOOK_MODERATION || process.env.DISCORD_WEBHOOK_APPROVED_PLUGIN;
+  if (!webhookUrl) return;
+
+  const pluginUrl = `${CONFIG.BASE_URL}/plugins/${plugin.slug}`;
+
+  const description = [
+    `**Reporter**: ${reporterUsername}`,
+    `**Reason**: **${reason}**`,
+    "",
+    `**Details**: ${details || "No additional details provided."}`
+  ].join("\n");
+
+  const embed: DiscordEmbed = {
+    title: `⚠️ Plugin Reported: ${plugin.displayName}`,
+    url: pluginUrl,
+    description,
+    color: CONFIG.COLORS.DANGER,
+    timestamp: new Date().toISOString(),
+    footer: { text: "EndGit Safety Report", icon_url: CONFIG.LOGO_URL }
+  };
+
+  await sendWebhook(webhookUrl, {
+    username: "Safety Alerts",
+    embeds: [embed]
+  });
+}
+
+
+
