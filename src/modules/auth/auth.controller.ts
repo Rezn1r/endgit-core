@@ -1,6 +1,7 @@
 import { Request, Response } from "express";
 import { AuthRequest } from "../../middleware/auth";
 import { authService } from "./auth.service";
+import { deviceService } from "./device.service";
 
 export class AuthController {
   async authenticateGitHub(req: Request, res: Response) {
@@ -26,6 +27,57 @@ export class AuthController {
         success: false,
         error: error.message || "Failed to get user info",
       });
+    }
+  }
+
+  // ── Device Authorization Flow (RFC 8628) ─────────────────────────
+
+  async requestDeviceCode(_req: Request, res: Response) {
+    try {
+      const data = await deviceService.createDeviceCode();
+      res.json({ success: true, data });
+    } catch (error: any) {
+      console.error("Device code error:", error);
+      res.status(500).json({
+        success: false,
+        error: "Failed to create device code",
+      });
+    }
+  }
+
+  async authorizeDevice(req: AuthRequest, res: Response) {
+    try {
+      const { user_code } = req.body;
+      if (!user_code || typeof user_code !== "string") {
+        return res.status(400).json({ success: false, error: "user_code is required" });
+      }
+      await deviceService.authorizeDevice(user_code, req.user!.id);
+      res.json({ success: true });
+    } catch (error: any) {
+      const status = error.message.includes("Invalid") || error.message.includes("expired")
+        ? 400
+        : 500;
+      res.status(status).json({ success: false, error: error.message || "Authorization failed" });
+    }
+  }
+
+  async pollDeviceToken(req: Request, res: Response) {
+    try {
+      const { device_code } = req.body;
+      if (!device_code || typeof device_code !== "string") {
+        return res.status(400).json({ success: false, error: "device_code is required" });
+      }
+
+      const result = await deviceService.pollDeviceToken(device_code);
+
+      if ("error" in result) {
+        return res.status(428).json({ success: false, error: result.error });
+      }
+
+      res.json({ success: true, data: result });
+    } catch (error: any) {
+      console.error("Device poll error:", error);
+      res.status(500).json({ success: false, error: "Failed to poll device token" });
     }
   }
 }
