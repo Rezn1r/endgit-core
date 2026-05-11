@@ -46,7 +46,7 @@ app.use(
   cors({
     origin: [
       process.env.NEXTAUTH_URL || "http://localhost:3000",
-      "http://localhost:3000" // Always allow localhost for local development
+      "http://localhost:4000" // Always allow localhost for local development
     ],
     credentials: true,
   })
