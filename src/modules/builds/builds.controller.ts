@@ -29,12 +29,12 @@ export class BuildsController {
     }
   }
 
-  async getPluginBuilds(req: Request, res: Response) {
+  async getPluginBuilds(req: AuthRequest, res: Response) {
     try {
       const page = parseInt(req.query.page as string) || 1;
       const limit = Math.min(parseInt(req.query.limit as string) || 20, 50);
 
-      const { plugin, builds, total, totalPages } = await buildsService.getPluginBuilds(String(req.params.slug), page, limit);
+      const { plugin, builds, total, totalPages } = await buildsService.getPluginBuilds(String(req.params.slug), page, limit, req.user?.id);
       res.json({ success: true, data: { plugin, builds }, pagination: { page, limit, total, totalPages } });
     } catch (error: any) {
       res.status(error.message === "Plugin not found" ? 404 : 500).json({ success: false, error: error.message || "Failed to fetch builds" });
