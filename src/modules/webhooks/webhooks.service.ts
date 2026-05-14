@@ -22,7 +22,15 @@ export class WebhooksService {
 
   async processGitHubPush(payload: any) {
     const repoUrl = payload.repository?.html_url;
-    const branch = payload.ref?.replace("refs/heads/", "") || "main";
+    const ref = payload.ref || "";
+
+    // Ignore tag pushes — only build branch commits
+    if (ref.startsWith("refs/tags/")) {
+      console.log(`[Webhook] 🏷️ Tag push detected (${ref}), skipping build`);
+      return { message: `Ignored tag push: ${ref}`, queued: false };
+    }
+
+    const branch = ref.replace("refs/heads/", "") || "main";
     const commitHash = payload.after || payload.head_commit?.id;
     const commitMessage = payload.head_commit?.message || "";
     const pusher = payload.pusher?.name || "unknown";
