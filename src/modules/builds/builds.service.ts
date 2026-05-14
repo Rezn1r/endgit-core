@@ -30,7 +30,7 @@ export class BuildsService {
     });
   }
 
-  async getPluginBuilds(slug: string, page: number, limit: number) {
+  async getPluginBuilds(slug: string, page: number, limit: number, viewerId?: string) {
     const skip = (page - 1) * limit;
     const buildWhere = { plugin: { slug } };
 
@@ -38,7 +38,7 @@ export class BuildsService {
       prisma.plugin.findUnique({
         where: { slug },
         select: { 
-          id: true, name: true, displayName: true, status: true, reviewBuildId: true, pluginType: true,
+          id: true, name: true, displayName: true, status: true, reviewBuildId: true, pluginType: true, authorId: true,
           versions: { select: { status: true, fileHash: true, version: true, fileUrl: true } }
         }
       }),
@@ -55,6 +55,7 @@ export class BuildsService {
 
     if (!plugin) throw new Error("Plugin not found");
 
+    const isOwner = Boolean(viewerId && viewerId === plugin.authorId);
     const buildsWithVersion = builds.map((build: any) => {
       let expectedFileUrl = build.artifactUrl || "";
       if (plugin.pluginType === "CPP") {
@@ -69,8 +70,9 @@ export class BuildsService {
       
       return {
         ...build,
-        versionStatus: version ? version.status : (build.isRelease ? "REJECTED" : null),
-        versionString: version ? version.version : null
+        versionStatus: isOwner ? (version ? version.status : (build.isRelease ? "REJECTED" : null)) : null,
+        versionString: isOwner && version ? version.version : null,
+        canSubmit: isOwner && build.status === "SUCCESS"
       };
     });
 
