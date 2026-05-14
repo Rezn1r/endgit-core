@@ -131,7 +131,8 @@ export class GithubService {
   }
 
   async enableCI(userId: string, repoData: any) {
-    const { name, fullName, htmlUrl, language, defaultBranch, description } = repoData;
+    const { name, fullName, htmlUrl, defaultBranch, description } = repoData;
+    let { language } = repoData;
 
     const existing = await prisma.plugin.findFirst({
       where: { repoUrl: htmlUrl, authorId: userId }
@@ -142,16 +143,56 @@ export class GithubService {
 
     const slug = name.toLowerCase().replace(/[^a-z0-9-]/g, "-").replace(/-+/g, "-");
 
-    if (language !== "C++" && language !== "Python" && language !== "C") {
-      throw new Error(`Unsupported repository language: ${language || 'Unknown'}. Only C++ and Python are supported for Endstone plugins.`);
-    }
-
-    const pluginType = (language === "C++" || language === "C") ? "CPP" : "PYTHON";
     const accessToken = await this.getAccessToken(userId);
-
     if (!accessToken || !fullName) throw new Error("GitHub account not linked properly");
 
     const [owner, repo] = fullName.split("/");
+
+    // Fallback language detection when GitHub hasn't detected language yet
+    if (!language) {
+      try {
+        const langRes = await fetch(`https://api.github.com/repos/${owner}/${repo}/languages`, {
+          headers: { Authorization: `Bearer ${accessToken}`, Accept: "application/vnd.github.v3+json", "User-Agent": "EndGit-CI" }
+        });
+        if (langRes.ok) {
+          const langs = await langRes.json() as Record<string, number>;
+          // Pick the language with the most bytes
+          const sorted = Object.entries(langs).sort((a, b) => b[1] - a[1]);
+          if (sorted.length > 0) {
+            language = sorted[0][0];
+          }
+        }
+      } catch {}
+    }
+
+    // If still no language, scan repo files for known extensions
+    if (!language) {
+      try {
+        const contentsRes = await fetch(`https://api.github.com/repos/${owner}/${repo}/contents`, {
+          headers: { Authorization: `Bearer ${accessToken}`, Accept: "application/vnd.github.v3+json", "User-Agent": "EndGit-CI" }
+        });
+        if (contentsRes.ok) {
+          const files = await contentsRes.json();
+          if (Array.isArray(files)) {
+            const names = files.map((f: any) => f.name.toLowerCase());
+            const hasCpp = names.some((n: string) => n.endsWith(".cpp") || n.endsWith(".h") || n.endsWith(".hpp") || n === "cmakelists.txt");
+            const hasPy = names.some((n: string) => n.endsWith(".py") || n === "pyproject.toml" || n === "setup.py");
+            if (hasCpp) language = "C++";
+            else if (hasPy) language = "Python";
+          }
+        }
+      } catch {}
+    }
+
+    if (!language) {
+      throw new Error("Unable to detect repository language. Please ensure the repository contains C++ or Python source files.");
+    }
+
+    if (language !== "C++" && language !== "Python" && language !== "C") {
+      throw new Error(`Unsupported repository language: ${language}. Only C++ and Python are supported for Endstone plugins.`);
+    }
+
+    const pluginType = (language === "C++" || language === "C") ? "CPP" : "PYTHON";
 
     const contentsRes = await fetch(`https://api.github.com/repos/${owner}/${repo}/contents`, {
       headers: { Authorization: `Bearer ${accessToken}`, Accept: "application/vnd.github.v3+json", "User-Agent": "EndGit-CI" }
