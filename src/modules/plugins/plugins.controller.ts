@@ -42,8 +42,12 @@ export class PluginsController {
 
   async getLatest(req: Request, res: Response) {
     try {
-      const data = await pluginsService.getLatest();
-      res.json({ success: true, data });
+      const data = await pluginsService.getLatest(req.query);
+      res.json({
+        success: true,
+        data: { plugins: data.plugins },
+        pagination: { page: data.page, pageSize: data.pageSize, total: data.total, totalPages: data.totalPages },
+      });
     } catch (error: any) {
       res.status(500).json({ success: false, error: "Failed to get latest plugins" });
     }

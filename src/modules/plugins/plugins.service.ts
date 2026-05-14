@@ -121,18 +121,32 @@ export class PluginsService {
     return plugins.map((p: any) => ({ ...p, latestVersion: p.versions[0]?.version || null, versions: undefined }));
   }
 
-  async getLatest() {
-    const plugins = await prisma.plugin.findMany({
-      where: { status: "APPROVED" },
-      orderBy: { createdAt: "desc" },
-      take: 12,
-      include: {
-        author: { select: { username: true, displayName: true, avatarUrl: true } },
-        versions: { where: { status: "APPROVED" }, orderBy: { createdAt: "desc" }, select: { version: true }, take: 1 },
-      },
-    });
+  async getLatest(query: { page?: string; pageSize?: string }) {
+    const page = Math.max(1, parseInt(query.page as string) || 1);
+    const pageSize = Math.min(50, Math.max(1, parseInt(query.pageSize as string) || 12));
+    const where = { status: "APPROVED" as const };
 
-    return plugins.map((p: any) => ({ ...p, latestVersion: p.versions[0]?.version || null, versions: undefined }));
+    const [plugins, total] = await Promise.all([
+      prisma.plugin.findMany({
+        where,
+        orderBy: { createdAt: "desc" },
+        skip: (page - 1) * pageSize,
+        take: pageSize,
+        include: {
+          author: { select: { username: true, displayName: true, avatarUrl: true } },
+          versions: { where: { status: "APPROVED" }, orderBy: { createdAt: "desc" }, select: { version: true }, take: 1 },
+        },
+      }),
+      prisma.plugin.count({ where }),
+    ]);
+
+    return {
+      plugins: plugins.map((p: any) => ({ ...p, latestVersion: p.versions[0]?.version || null, versions: undefined })),
+      page,
+      pageSize,
+      total,
+      totalPages: Math.ceil(total / pageSize),
+    };
   }
 
   async getGlobalStats() {
