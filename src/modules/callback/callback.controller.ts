@@ -1,7 +1,8 @@
 import { Request, Response } from "express";
 import { callbackService } from "./callback.service";
+import { requireSecret } from "../../lib/secrets";
 
-const CALLBACK_TOKEN = process.env.ENDGIT_CALLBACK_TOKEN || "endgit-callback-secret";
+const CALLBACK_TOKEN = requireSecret("ENDGIT_CALLBACK_TOKEN");
 
 export class CallbackController {
   async processArtifactCallback(req: Request, res: Response) {

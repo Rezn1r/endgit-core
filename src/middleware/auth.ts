@@ -5,6 +5,7 @@
 import { Request, Response, NextFunction } from "express";
 import jwt from "jsonwebtoken";
 import { prisma } from "@endgit/database";
+import { requireSecret } from "../lib/secrets";
 
 export interface AuthRequest extends Request {
     user?: {
@@ -14,7 +15,7 @@ export interface AuthRequest extends Request {
     };
 }
 
-const JWT_SECRET = process.env.NEXTAUTH_SECRET || "dev-secret";
+const JWT_SECRET = requireSecret("NEXTAUTH_SECRET");
 
 /**
  * Required authentication — rejects with 401 if no valid token
