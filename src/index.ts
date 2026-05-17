@@ -25,6 +25,7 @@ import { webhookRouter } from "./modules/webhooks/webhooks.routes";
 import { callbackRouter } from "./modules/callback/callback.routes";
 
 const app: express.Express = express();
+app.set("trust proxy", 1);
 const PORT = process.env.PORT || process.env.API_PORT || 4000;
 
 // ── Middleware ────────────────────────────────────────────
