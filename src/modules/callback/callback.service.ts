@@ -6,6 +6,14 @@ const storage = createStorage();
 
 export class CallbackService {
   async processCallback(buildId: string, platform: string, status: string, error?: string, file?: any) {
+    if (platform !== "windows" && platform !== "linux") {
+      throw new Error("Invalid callback platform");
+    }
+
+    if (status !== "SUCCESS" && status !== "FAILED") {
+      throw new Error("Invalid callback status");
+    }
+
     const build = await prisma.build.findUnique({
       where: { id: buildId },
       include: { plugin: { select: { slug: true, displayName: true, pluginType: true } } }
@@ -41,7 +49,6 @@ export class CallbackService {
 
     const fileBuffer = await fs.promises.readFile(file.path);
     await storage.upload(artifactKey, fileBuffer, "application/octet-stream");
-    await fs.promises.unlink(file.path).catch(err => console.error("Failed to delete temp file:", err));
     
     const artifactUrl = `/api/v1/download/file/${encodeURIComponent(artifactKey)}`;
     const artifactSize = file.size;
