@@ -2,6 +2,7 @@ import { prisma } from "@endgit/database";
 import { createStorage } from "@endgit/storage";
 import path from "path";
 import IORedis from "ioredis";
+import { normalizeDownloadArtifactKey } from "./storageKeys";
 
 const REDIS_URL = process.env.REDIS_URL || "redis://localhost:6379";
 const redis = new IORedis(REDIS_URL, {
@@ -14,11 +15,12 @@ const storage = createStorage();
 
 export class DownloadService {
   async downloadFileByKey(key: string) {
-    const exists = await storage.exists(key);
+    const storageKey = normalizeDownloadArtifactKey(key);
+    const exists = await storage.exists(storageKey);
     if (!exists) throw new Error("File not found");
 
-    const file = await storage.download(key);
-    const fileName = path.basename(decodeURIComponent(key));
+    const file = await storage.download(storageKey);
+    const fileName = path.basename(storageKey);
 
     return { file, fileName };
   }
@@ -45,12 +47,8 @@ export class DownloadService {
       if (e.message.includes("required")) throw e;
     }
 
-    const downloadPrefix = "/api/v1/download/file/";
-    if (storageKey && storageKey.startsWith(downloadPrefix)) {
-      storageKey = decodeURIComponent(storageKey.slice(downloadPrefix.length));
-    }
-
     if (!storageKey) throw new Error("Artifact not found for this platform");
+    storageKey = normalizeDownloadArtifactKey(storageKey, plugin.slug);
 
     const file = await storage.download(storageKey);
 

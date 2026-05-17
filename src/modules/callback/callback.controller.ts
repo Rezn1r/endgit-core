@@ -1,17 +1,10 @@
 import { Request, Response } from "express";
 import { callbackService } from "./callback.service";
-import { requireSecret } from "../../lib/secrets";
-
-const CALLBACK_TOKEN = requireSecret("ENDGIT_CALLBACK_TOKEN");
+import fs from "fs";
 
 export class CallbackController {
   async processArtifactCallback(req: Request, res: Response) {
     try {
-      const token = req.headers.authorization?.replace("Bearer ", "");
-      if (token !== CALLBACK_TOKEN) {
-        return res.status(401).json({ success: false, error: "Unauthorized callback" });
-      }
-
       const platform = (req.body.platform as string) || "unknown";
       const status = (req.body.status as string) || "FAILED";
       const error = req.body.error as string | undefined;
@@ -20,8 +13,15 @@ export class CallbackController {
       res.json({ success: true, message: result.message });
     } catch (error: any) {
       console.error("[Callback] Error:", error);
-      res.status(error.message === "Build not found" ? 404 : (error.message === "No artifact file provided" ? 400 : 500))
+      const badRequest = error.message === "No artifact file provided" ||
+        error.message === "Invalid callback platform" ||
+        error.message === "Invalid callback status";
+      res.status(error.message === "Build not found" ? 404 : (badRequest ? 400 : 500))
          .json({ success: false, error: error.message || "Callback processing failed" });
+    } finally {
+      if (req.file?.path) {
+        await fs.promises.unlink(req.file.path).catch(() => {});
+      }
     }
   }
 }
