@@ -1,6 +1,7 @@
 import { prisma } from "@endgit/database";
 import { Queue } from "bullmq";
 import IORedis from "ioredis";
+import { requireSecret } from "../../lib/secrets";
 
 const REDIS_URL = process.env.REDIS_URL || "redis://localhost:6379";
 const connection = new IORedis(REDIS_URL, {
@@ -10,7 +11,7 @@ const connection = new IORedis(REDIS_URL, {
 });
 const buildQueue = new Queue("build-jobs", { connection });
 
-const WEBHOOK_SECRET = process.env.ENDGIT_WEBHOOK_SECRET || "endgit-webhook-secret";
+const WEBHOOK_SECRET = requireSecret("ENDGIT_WEBHOOK_SECRET");
 const WEBHOOK_URL = process.env.ENDGIT_WEBHOOK_URL || "http://localhost:4000/api/v1/webhooks/github";
 
 export class GithubService {

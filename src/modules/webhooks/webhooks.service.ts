@@ -2,6 +2,7 @@ import { prisma } from "@endgit/database";
 import { Queue } from "bullmq";
 import IORedis from "ioredis";
 import crypto from "crypto";
+import { requireSecret } from "../../lib/secrets";
 
 const REDIS_URL = process.env.REDIS_URL || "redis://localhost:6379";
 const connection = new IORedis(REDIS_URL, {
@@ -11,12 +12,13 @@ const connection = new IORedis(REDIS_URL, {
 });
 const buildQueue = new Queue("build-jobs", { connection });
 
-const WEBHOOK_SECRET = process.env.ENDGIT_WEBHOOK_SECRET || "endgit-webhook-secret";
+const WEBHOOK_SECRET = requireSecret("ENDGIT_WEBHOOK_SECRET");
 
 export class WebhooksService {
   verifySignature(payload: Buffer, signature: string | undefined): boolean {
     if (!signature) return false;
     const expected = "sha256=" + crypto.createHmac("sha256", WEBHOOK_SECRET).update(payload).digest("hex");
+    if (signature.length !== expected.length) return false;
     return crypto.timingSafeEqual(Buffer.from(signature), Buffer.from(expected));
   }
 
