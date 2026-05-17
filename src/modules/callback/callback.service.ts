@@ -117,11 +117,11 @@ export class CallbackService {
       data: { status: finalStatus, duration, finishedAt: new Date() }
     });
 
-    // trustScore is now only updated upon submission of a specific build
-
     try {
-      const webhookUrl = process.env.DISCORD_WEBHOOK_URL;
-      if (webhookUrl) {
+      const webhookUrl = this.getBuildWebhookUrl();
+      if (!webhookUrl) {
+        console.warn("[Callback] Discord build webhook not configured");
+      } else {
         const baseUrl = process.env.NEXT_PUBLIC_APP_URL || "https://endgit.dev";
         const buildLogLink = `${baseUrl}/builds/${buildId}`;
 
@@ -146,7 +146,7 @@ export class CallbackService {
           timestamp: new Date().toISOString()
         };
 
-        await fetch(webhookUrl, {
+        const response = await fetch(webhookUrl, {
           method: "POST", headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             username: "EndGit-CI", avatar_url: "https://github.com/fluidicon.png",
@@ -154,6 +154,12 @@ export class CallbackService {
             embeds: [embed]
           })
         });
+
+        if (!response.ok) {
+          const body = await response.text().catch(() => "");
+          throw new Error(`Discord webhook failed (${response.status}): ${body}`);
+        }
+
         console.log(`[Callback] Discord notification sent for build #${build.buildNumber}`);
       }
     } catch (e: any) {
@@ -169,6 +175,10 @@ export class CallbackService {
     if (bytes < 1024) return `${bytes} B`;
     if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
     return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  }
+
+  getBuildWebhookUrl(): string | undefined {
+    return process.env.DISCORD_WEBHOOK_BUILD;
   }
 }
 
