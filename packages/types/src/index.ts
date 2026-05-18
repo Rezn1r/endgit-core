@@ -170,6 +170,22 @@ export interface RatingInfo {
   createdAt: string;
 }
 
+// ── Repo Config ───────────────────────────────────────────
+
+export interface EndGitBuildConfig {
+  command?: string;
+  output?: string;
+}
+
+export interface EndGitRepoConfig {
+  name?: string;
+  icon?: string;
+  branch?: string | string[];
+  description?: string;
+  visibility?: "public" | "private";
+  build?: EndGitBuildConfig;
+}
+
 // ── API Response ──────────────────────────────────────────
 
 export interface ApiResponse<T> {
