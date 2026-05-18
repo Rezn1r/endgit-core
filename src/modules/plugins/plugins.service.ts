@@ -1,6 +1,7 @@
 import { prisma } from "@endgit/database";
 import { Queue } from "bullmq";
 import IORedis from "ioredis";
+import { repoconfigService } from "../repoconfig/repoconfig.service";
 
 const REDIS_URL = process.env.REDIS_URL || "redis://localhost:6379";
 const connection = new IORedis(REDIS_URL, {
@@ -194,13 +195,48 @@ export class PluginsService {
     const averageRating = totalRatings > 0 ? plugin.ratings.reduce((sum: number, r: any) => sum + r.score, 0) / totalRatings : 0;
     const latestApprovedVersion = visibleVersions.find((v: any) => v.isLatest)?.version || visibleVersions[0]?.version || null;
 
+    let repoConfig = null;
+    let displayName = plugin.displayName;
+    let iconUrl = plugin.iconUrl;
+    let description = plugin.description;
+
+    // Attempt to fetch and merge .endgit.yml config if the plugin has a repoUrl
+    if (plugin.repoUrl) {
+      try {
+        const accessToken = await repoconfigService.getAccessToken(plugin.authorId);
+        if (accessToken) {
+          const match = plugin.repoUrl.match(/github\.com\/([^/]+)\/([^/.]+)/);
+          if (match) {
+            const [, owner, repo] = match;
+            repoConfig = await repoconfigService.fetchConfigFromRepo(accessToken, owner, repo);
+            if (repoConfig) {
+              const merged = repoconfigService.mergeConfig(repoConfig, {
+                displayName: plugin.displayName,
+                iconUrl: plugin.iconUrl,
+                description: plugin.description,
+              });
+              displayName = merged.displayName;
+              iconUrl = merged.iconUrl;
+              description = merged.description;
+            }
+          }
+        }
+      } catch {
+        // If config fetch fails, return the plugin data unchanged
+      }
+    }
+
     return {
       ...plugin,
+      displayName,
+      iconUrl,
+      description,
       versions: visibleVersions,
       ratings: undefined,
       averageRating: Math.round(averageRating * 10) / 10,
       totalRatings,
       latestVersion: latestApprovedVersion,
+      repoConfig,
     };
   }
 
