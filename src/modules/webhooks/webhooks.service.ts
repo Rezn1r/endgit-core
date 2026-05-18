@@ -61,7 +61,7 @@ export class WebhooksService {
         const match = repoUrl.match(/github\.com\/([^/]+)\/([^/]+)/);
         if (match) {
           const [, owner, repo] = match;
-          const config = await repoconfigService.fetchConfigFromRepo(account.access_token, owner, repo, branch);
+          const config = await repoconfigService.fetchConfigFromRepo(account.access_token, owner, repo);
 
           if (config && config.branch) {
             const allowedBranches = Array.isArray(config.branch) ? config.branch : [config.branch];

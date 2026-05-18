@@ -2,6 +2,24 @@
 // Lightweight YAML Parser for .endgit.yml
 // Supports: string values, inline/block arrays, one-level nested objects, comments
 // ─────────────────────────────────────────────────────────
+//
+// SUPPORTED SUBSET:
+//   - Top-level key: value pairs (unquoted and quoted strings)
+//   - Inline arrays: key: [item1, item2]
+//   - Block arrays: key:\n  - item1\n  - item2
+//   - One-level nested objects: key:\n  subkey: value
+//   - Comments (lines starting with #, inline # after space)
+//
+// NOT SUPPORTED (will produce incorrect results or be silently ignored):
+//   - Multi-line strings (| or > block scalars)
+//   - Flow mappings ({key: val})
+//   - Anchors and aliases (& and *)
+//   - Typed values (true/false/null are treated as plain strings)
+//   - Escape sequences in quoted strings
+//   - Deeply nested structures (more than one level)
+//
+// If you need these features, consider using a full YAML parser library.
+// ─────────────────────────────────────────────────────────
 
 /**
  * Parse a simple YAML string into a key-value record.
