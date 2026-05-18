@@ -3,6 +3,7 @@ import { Queue } from "bullmq";
 import IORedis from "ioredis";
 import crypto from "crypto";
 import { requireSecret } from "../../lib/secrets";
+import { repoconfigService } from "../repoconfig/repoconfig.service";
 
 const REDIS_URL = process.env.REDIS_URL || "redis://localhost:6379";
 const connection = new IORedis(REDIS_URL, {
@@ -47,6 +48,32 @@ export class WebhooksService {
     if (!plugin) {
       console.log(`[Webhook] ℹ️ No plugin linked to ${repoUrl}, skipping`);
       return { message: "No plugin linked to this repo", queued: false };
+    }
+
+    // Fetch .endgit.yml config and check branch filtering
+    try {
+      const account = await prisma.account.findFirst({
+        where: { userId: plugin.authorId, provider: "github" },
+        select: { access_token: true }
+      });
+
+      if (account?.access_token) {
+        const match = repoUrl.match(/github\.com\/([^/]+)\/([^/]+)/);
+        if (match) {
+          const [, owner, repo] = match;
+          const config = await repoconfigService.fetchConfigFromRepo(account.access_token, owner, repo);
+
+          if (config && config.branch) {
+            const allowedBranches = Array.isArray(config.branch) ? config.branch : [config.branch];
+            if (!allowedBranches.includes(branch)) {
+              console.log(`[Webhook] ⏭️ Branch "${branch}" not configured for CI in .endgit.yml (allowed: ${allowedBranches.join(", ")})`);
+              return { message: "Branch not configured for CI in .endgit.yml", queued: false };
+            }
+          }
+        }
+      }
+    } catch (error: any) {
+      console.warn(`[Webhook] ⚠️ Failed to fetch .endgit.yml config, proceeding with build:`, error.message);
     }
 
     const author = await prisma.user.findUnique({

@@ -23,6 +23,7 @@ import { ratingRouter } from "./modules/ratings/ratings.routes";
 import { submitRouter } from "./modules/submit/submit.routes";
 import { webhookRouter } from "./modules/webhooks/webhooks.routes";
 import { callbackRouter } from "./modules/callback/callback.routes";
+import { repoconfigRouter } from "./modules/repoconfig/repoconfig.routes";
 
 const app: express.Express = express();
 app.set("trust proxy", 1);
@@ -90,6 +91,7 @@ app.use("/api/v1/ratings", ratingRouter);
 app.use("/api/v1/submit", submitRouter);
 app.use("/api/v1/webhooks", webhookRouter);
 app.use("/api/v1/builds", callbackRouter); // GitHub Actions artifact callbacks
+app.use("/api/v1/repoconfig", repoconfigRouter);
 
 // ── Error Handler ────────────────────────────────────────
 
