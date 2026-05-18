@@ -1,4 +1,5 @@
 import { prisma } from "@endgit/database";
+import { repoconfigService } from "../repoconfig/repoconfig.service";
 
 export class DashboardService {
   async getStatus(userId: string) {
@@ -71,6 +72,9 @@ export class DashboardService {
       },
     });
 
+    // Note: Callers can use getPluginConfig() to enrich individual plugins with
+    // .endgit.yml overrides (display name, icon, description). Not done here to
+    // avoid N+1 GitHub API calls for the full list.
     return plugins.map((p: any) => ({
       ...p,
       latestVersion: p.versions[0]?.version || null,
@@ -80,6 +84,26 @@ export class DashboardService {
       reportCount: p._count.reports,
       _count: undefined,
     }));
+  }
+
+  /**
+   * Fetch the .endgit.yml config for a specific plugin's repository.
+   * Returns the parsed config or null if not found/invalid.
+   */
+  async getPluginConfig(pluginId: string, repoUrl: string, authorId: string) {
+    try {
+      const accessToken = await repoconfigService.getAccessToken(authorId);
+      if (!accessToken) return null;
+
+      // Parse owner/repo from repoUrl (e.g., https://github.com/owner/repo)
+      const match = repoUrl.match(/github\.com\/([^/]+)\/([^/.]+)/);
+      if (!match) return null;
+
+      const [, owner, repo] = match;
+      return await repoconfigService.fetchConfigFromRepo(accessToken, owner, repo);
+    } catch {
+      return null;
+    }
   }
 
   async getMyStats(userId: string) {
