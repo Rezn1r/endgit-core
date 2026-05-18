@@ -10,6 +10,18 @@ export class RepoConfigService {
   private cache: Map<string, { data: EndGitRepoConfig | null; timestamp: number }> = new Map();
   private static CACHE_TTL_MS = 60_000; // 60 seconds
   private static FETCH_TIMEOUT_MS = 5_000; // 5 seconds
+  private static MAX_CACHE_SIZE = 500;
+
+  private cacheSet(key: string, value: { data: EndGitRepoConfig | null; timestamp: number }): void {
+    if (this.cache.size >= RepoConfigService.MAX_CACHE_SIZE && !this.cache.has(key)) {
+      // Evict the oldest entry (first key in insertion-order Map)
+      const firstKey = this.cache.keys().next().value;
+      if (firstKey !== undefined) {
+        this.cache.delete(firstKey);
+      }
+    }
+    this.cache.set(key, value);
+  }
 
   async getAccessToken(userId: string): Promise<string | null> {
     const account = await prisma.account.findFirst({
@@ -25,7 +37,7 @@ export class RepoConfigService {
     repo: string,
     branch?: string
   ): Promise<EndGitRepoConfig | null> {
-    const cacheKey = `${owner}/${repo}`;
+    const cacheKey = `${owner}/${repo}#${branch || "default"}`;
     const cached = this.cache.get(cacheKey);
     if (cached && (Date.now() - cached.timestamp) < RepoConfigService.CACHE_TTL_MS) {
       return cached.data;
@@ -66,12 +78,12 @@ export class RepoConfigService {
 
         if (!validation.valid) {
           console.warn(`[RepoConfig] Validation errors in ${owner}/${repo}/${filename}:`, validation.errors);
-          this.cache.set(cacheKey, { data: null, timestamp: Date.now() });
+          this.cacheSet(cacheKey, { data: null, timestamp: Date.now() });
           return null;
         }
 
         const config = parsed as EndGitRepoConfig;
-        this.cache.set(cacheKey, { data: config, timestamp: Date.now() });
+        this.cacheSet(cacheKey, { data: config, timestamp: Date.now() });
         return config;
       } catch (error: any) {
         console.warn(`[RepoConfig] Error fetching ${filename} from ${owner}/${repo}:`, error.message);
@@ -79,7 +91,7 @@ export class RepoConfigService {
       }
     }
 
-    this.cache.set(cacheKey, { data: null, timestamp: Date.now() });
+    this.cacheSet(cacheKey, { data: null, timestamp: Date.now() });
     return null;
   }
 
