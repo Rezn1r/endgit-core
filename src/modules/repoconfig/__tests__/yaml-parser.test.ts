@@ -124,6 +124,26 @@ visibility: private`;
     assertEqual(result, { branch: ["develop", "main"] }, "Block array with comments between items");
   }
 
+  // Test: Block scalar indicator is skipped (multi-line string)
+  {
+    const yaml = `name: "My Plugin"
+description: |
+  This is a multi-line
+  description block
+visibility: public`;
+    const result = parseYaml(yaml);
+    assertEqual(result, { name: "My Plugin", visibility: "public" }, "Block scalar indicator (|) causes key to be omitted");
+  }
+
+  // Test: Flow mapping value is skipped
+  {
+    const yaml = `name: "My Plugin"
+build: {command: "make", output: "dist/"}
+visibility: private`;
+    const result = parseYaml(yaml);
+    assertEqual(result, { name: "My Plugin", visibility: "private" }, "Flow mapping value ({...}) causes key to be omitted");
+  }
+
   console.log("\n─────────────────────────────────────────");
   console.log("All YAML parser tests passed!");
 }

@@ -71,6 +71,26 @@ export function parseYaml(content: string): Record<string, any> {
       // Inline array: [item1, item2]
       result[key] = parseInlineArray(rawValue);
       i++;
+    } else if (/^[|>][+-]?$/.test(rawValue)) {
+      // Block scalar indicator (unsupported) - skip this key
+      console.warn(`[YamlParser] Skipping key "${key}": block scalar indicators (${rawValue}) are not supported`);
+      i++;
+      // Skip indented continuation lines that belong to this block
+      while (i < lines.length) {
+        const nextLine = lines[i];
+        const nextTrimmed = nextLine.trimEnd();
+        if (nextTrimmed === "" || nextTrimmed.trimStart().startsWith("#")) {
+          i++;
+          continue;
+        }
+        const nextIndent = nextLine.length - nextLine.trimStart().length;
+        if (nextIndent === 0) break;
+        i++;
+      }
+    } else if (rawValue.startsWith("{")) {
+      // Flow mapping (unsupported) - skip this key
+      console.warn(`[YamlParser] Skipping key "${key}": flow mappings are not supported`);
+      i++;
     } else {
       // Simple string value
       result[key] = parseStringValue(rawValue);
