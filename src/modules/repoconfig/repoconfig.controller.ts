@@ -37,6 +37,11 @@ export class RepoConfigController {
         return res.status(400).json({ success: false, error: "Plugin has no linked repository" });
       }
 
+      // Authorization: only plugin owner or admins can access config
+      if (req.user!.id !== plugin.authorId && req.user!.trustLevel !== "ADMIN") {
+        return res.status(403).json({ success: false, error: "You do not have permission to access this plugin's config" });
+      }
+
       const accessToken = await repoconfigService.getAccessToken(plugin.authorId);
       if (!accessToken) {
         return res.status(400).json({ success: false, error: "GitHub account not linked for plugin author" });
